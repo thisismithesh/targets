@@ -127,3 +127,13 @@ button:focus {
   0%   { opacity: 0; transform: translateY(8px); }
   100% { opacity: 1; transform: translateY(0); }
 }
+
+/* ── Chat panel pop-in (emerges from the bubble, bottom-right) ──────── */
+.chat-pop {
+  transform-origin: bottom right;
+  animation: chatPop 0.22s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+@keyframes chatPop {
+  0%   { opacity: 0; transform: scale(0.5) translateY(20px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
