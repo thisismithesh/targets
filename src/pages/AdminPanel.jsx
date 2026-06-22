@@ -1,40 +1,41 @@
 import { useState, useEffect } from 'react'
-import { supabase, getTeamMembers, getCurrentWeek, createTeamMember, updateTeamMember, deleteTeamMember, createTask } from '../lib/supabase'
+import {
+  getTeamMembers,
+  createTeamMember,
+  updateTeamMember,
+  deleteTeamMember,
+  getAllWeeks,
+  getWeeklyTasks,
+} from '../lib/supabase'
 
 export default function AdminPanel() {
   const [teamMembers, setTeamMembers] = useState([])
-  const [currentWeek, setCurrentWeek] = useState(null)
+  const [weeks, setWeeks] = useState([])
+  const [selectedWeekId, setSelectedWeekId] = useState('')
+  const [hoursByMember, setHoursByMember] = useState({})
   const [isLoading, setIsLoading] = useState(true)
   const [newMemberName, setNewMemberName] = useState('')
-  const [newMemberEmail, setNewMemberEmail] = useState('')
-  const [selectedMemberId, setSelectedMemberId] = useState('')
-  const [newTask, setNewTask] = useState({
-    task_name: '',
-    heading: 'General',
-    deadline: '',
-    estimated_hours: '',
-  })
-  const [message, setMessage] = useState('')
-  const [editingMember, setEditingMember] = useState(null) // { id, name, email }
+  const [newMemberTeam, setNewMemberTeam] = useState('')
+  const [editingMember, setEditingMember] = useState(null)
   const [editName, setEditName] = useState('')
-  const [editEmail, setEditEmail] = useState('')
+  const [editTeam, setEditTeam] = useState('')
+  const [message, setMessage] = useState('')
 
   useEffect(() => {
     loadData()
   }, [])
 
+  useEffect(() => {
+    if (selectedWeekId) loadHours()
+  }, [selectedWeekId, teamMembers])
+
   const loadData = async () => {
     try {
       setIsLoading(true)
-      const members = await getTeamMembers()
+      const [members, allWeeks] = await Promise.all([getTeamMembers(), getAllWeeks()])
       setTeamMembers(members)
-      
-      const week = await getCurrentWeek()
-      setCurrentWeek(week)
-      
-      if (members.length > 0) {
-        setSelectedMemberId(members[0].id)
-      }
+      setWeeks(allWeeks)
+      if (allWeeks.length > 0) setSelectedWeekId(allWeeks[0].id)
     } catch (err) {
       console.error('Error loading data:', err)
       setMessage('Error loading data')
@@ -43,57 +44,42 @@ export default function AdminPanel() {
     }
   }
 
-  const handleAddTeamMember = async (e) => {
-    e.preventDefault()
-    if (!newMemberName || !newMemberEmail) {
-      setMessage('Please fill in all fields')
-      return
-    }
-
+  const loadHours = async () => {
+    if (!selectedWeekId) return
     try {
-      await createTeamMember({
-        name: newMemberName,
-        email: newMemberEmail,
+      const tasks = await getWeeklyTasks(selectedWeekId)
+      const hours = {}
+      teamMembers.forEach((m) => { hours[m.id] = 0 })
+      tasks.forEach((t) => {
+        if (hours[t.team_member_id] !== undefined) {
+          hours[t.team_member_id] += t.estimated_hours || 0
+        }
       })
-      setNewMemberName('')
-      setNewMemberEmail('')
-      setMessage('Team member added successfully!')
-      await loadData()
-      setTimeout(() => setMessage(''), 3000)
+      setHoursByMember(hours)
     } catch (err) {
-      setMessage('Error adding team member')
-      console.error(err)
+      console.error('Error loading hours:', err)
     }
   }
 
-  const handleAddTask = async (e) => {
+  const showMessage = (msg) => {
+    setMessage(msg)
+    setTimeout(() => setMessage(''), 3000)
+  }
+
+  const handleAddTeamMember = async (e) => {
     e.preventDefault()
-    if (!selectedMemberId || !newTask.task_name || !currentWeek) {
-      setMessage('Please select a team member and enter a task name')
+    if (!newMemberName || !newMemberTeam) {
+      setMessage('Please fill in all fields')
       return
     }
-
     try {
-      await createTask({
-        team_member_id: selectedMemberId,
-        week_id: currentWeek.id,
-        task_name: newTask.task_name,
-        heading: newTask.heading,
-        deadline: newTask.deadline || null,
-        estimated_hours: newTask.estimated_hours ? parseFloat(newTask.estimated_hours) : null,
-        status: 'pending',
-        position: 0,
-      })
-      setNewTask({
-        task_name: '',
-        heading: 'General',
-        deadline: '',
-        estimated_hours: '',
-      })
-      setMessage('Task added successfully!')
-      setTimeout(() => setMessage(''), 3000)
+      await createTeamMember({ name: newMemberName, team: newMemberTeam })
+      setNewMemberName('')
+      setNewMemberTeam('')
+      showMessage('Team member added successfully!')
+      await loadData()
     } catch (err) {
-      setMessage('Error adding task')
+      setMessage('Error adding team member')
       console.error(err)
     }
   }
@@ -101,20 +87,19 @@ export default function AdminPanel() {
   const handleEditTeamMember = (member) => {
     setEditingMember(member)
     setEditName(member.name)
-    setEditEmail(member.email)
+    setEditTeam(member.team)
   }
 
   const handleSaveEdit = async () => {
-    if (!editName || !editEmail) {
+    if (!editName || !editTeam) {
       setMessage('Please fill in all fields')
       return
     }
     try {
-      await updateTeamMember(editingMember.id, { name: editName, email: editEmail })
+      await updateTeamMember(editingMember.id, { name: editName, team: editTeam })
       setEditingMember(null)
-      setMessage('Team member updated successfully!')
+      showMessage('Team member updated successfully!')
       await loadData()
-      setTimeout(() => setMessage(''), 3000)
     } catch (err) {
       setMessage('Error updating team member')
       console.error(err)
@@ -125,18 +110,15 @@ export default function AdminPanel() {
     if (!window.confirm('Delete this team member? Their tasks will also be removed.')) return
     try {
       await deleteTeamMember(memberId)
-      setMessage('Team member deleted.')
+      showMessage('Team member deleted.')
       await loadData()
-      setTimeout(() => setMessage(''), 3000)
     } catch (err) {
       setMessage('Error deleting team member')
       console.error(err)
     }
   }
 
-  if (isLoading) {
-    return <div className="text-center py-8">Loading...</div>
-  }
+  if (isLoading) return <div className="text-center py-8">Loading...</div>
 
   return (
     <div>
@@ -149,14 +131,12 @@ export default function AdminPanel() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Add Team Member */}
+        {/* Team Member Management */}
         <div className="bg-white rounded-lg border border-gray-200 p-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4">Add Team Member</h2>
-          <form onSubmit={handleAddTeamMember} className="space-y-4">
+          <form onSubmit={handleAddTeamMember} className="space-y-4 mb-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Name
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
               <input
                 type="text"
                 value={newMemberName}
@@ -166,15 +146,13 @@ export default function AdminPanel() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Team</label>
               <input
-                type="email"
-                value={newMemberEmail}
-                onChange={(e) => setNewMemberEmail(e.target.value)}
+                type="text"
+                value={newMemberTeam}
+                onChange={(e) => setNewMemberTeam(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="e.g., john@company.com"
+                placeholder="e.g., Engineering"
               />
             </div>
             <button
@@ -185,11 +163,11 @@ export default function AdminPanel() {
             </button>
           </form>
 
-          <div className="mt-6 pt-6 border-t border-gray-200">
-            <h3 className="text-sm font-medium text-gray-900 mb-3">Team Members</h3>
+          <div className="pt-4 border-t border-gray-200">
+            <h3 className="text-sm font-medium text-gray-900 mb-3">Team Members ({teamMembers.length})</h3>
             <div className="space-y-2">
               {teamMembers.map((member) => (
-                <div key={member.id} className="p-2 bg-gray-50 rounded">
+                <div key={member.id} className="p-3 bg-gray-50 rounded">
                   {editingMember?.id === member.id ? (
                     <div className="space-y-2">
                       <input
@@ -200,11 +178,11 @@ export default function AdminPanel() {
                         placeholder="Name"
                       />
                       <input
-                        type="email"
-                        value={editEmail}
-                        onChange={(e) => setEditEmail(e.target.value)}
+                        type="text"
+                        value={editTeam}
+                        onChange={(e) => setEditTeam(e.target.value)}
                         className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Email"
+                        placeholder="Team"
                       />
                       <div className="flex gap-2">
                         <button
@@ -225,7 +203,7 @@ export default function AdminPanel() {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="font-medium text-gray-900">{member.name}</p>
-                        <p className="text-xs text-gray-600">{member.email}</p>
+                        <p className="text-xs text-gray-500">{member.team}</p>
                       </div>
                       <div className="flex gap-1">
                         <button
@@ -245,90 +223,49 @@ export default function AdminPanel() {
                   )}
                 </div>
               ))}
+              {teamMembers.length === 0 && (
+                <p className="text-sm text-gray-500 text-center py-4">No team members yet.</p>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Add Task */}
+        {/* Total Hours by Week */}
         <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Add Task</h2>
-          {currentWeek ? (
-            <form onSubmit={handleAddTask} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Team Member
-                </label>
-                <select
-                  value={selectedMemberId}
-                  onChange={(e) => setSelectedMemberId(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select a team member</option>
-                  {teamMembers.map((member) => (
-                    <option key={member.id} value={member.id}>
-                      {member.name}
-                    </option>
-                  ))}
-                </select>
+          <h2 className="text-xl font-bold text-gray-900 mb-4">Total Hours by Member</h2>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Select Week</label>
+            <select
+              value={selectedWeekId}
+              onChange={(e) => setSelectedWeekId(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {weeks.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.week_start_date} → {w.week_end_date}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            {teamMembers.map((member) => (
+              <div key={member.id} className="flex items-center justify-between p-3 bg-gray-50 rounded">
+                <div>
+                  <p className="font-medium text-gray-900 text-sm">{member.name}</p>
+                  <p className="text-xs text-gray-500">{member.team}</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-lg font-bold text-blue-600">
+                    {(hoursByMember[member.id] || 0).toFixed(1)}h
+                  </span>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Task Name
-                </label>
-                <input
-                  type="text"
-                  value={newTask.task_name}
-                  onChange={(e) => setNewTask({ ...newTask, task_name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g., Complete project report"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Category/Heading
-                </label>
-                <input
-                  type="text"
-                  value={newTask.heading}
-                  onChange={(e) => setNewTask({ ...newTask, heading: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g., Development"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Deadline
-                </label>
-                <input
-                  type="date"
-                  value={newTask.deadline}
-                  onChange={(e) => setNewTask({ ...newTask, deadline: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Estimated Hours
-                </label>
-                <input
-                  type="number"
-                  step="0.5"
-                  value={newTask.estimated_hours}
-                  onChange={(e) => setNewTask({ ...newTask, estimated_hours: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g., 4.5"
-                />
-              </div>
-              <button
-                type="submit"
-                className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
-              >
-                Add Task
-              </button>
-            </form>
-          ) : (
-            <p className="text-gray-500">No current week found. Please set up a week first.</p>
-          )}
+            ))}
+            {teamMembers.length === 0 && (
+              <p className="text-sm text-gray-500 text-center py-4">No team members yet.</p>
+            )}
+          </div>
         </div>
       </div>
     </div>
