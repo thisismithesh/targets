@@ -21,10 +21,23 @@ export function formatDateShort(date) {
 export function isOverdue(deadline, completedDate, status) {
   if (status === 'completed' || completedDate) return false
   if (!deadline) return false
-  
+
   const today = new Date()
+  today.setHours(0, 0, 0, 0)
   const deadlineDate = parseISO(deadline)
+  deadlineDate.setHours(0, 0, 0, 0)
   return deadlineDate < today
+}
+
+export function isDueToday(deadline, completedDate, status) {
+  if (status === 'completed' || completedDate) return false
+  if (!deadline) return false
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const deadlineDate = parseISO(deadline)
+  deadlineDate.setHours(0, 0, 0, 0)
+  return deadlineDate.getTime() === today.getTime()
 }
 
 export function getWeekLabel(weekStartDate) {
