@@ -1,13 +1,20 @@
 import { useState, useRef, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { formatDate, getStatusColor, getStatusLabel, isOverdue } from '../lib/utils'
+import { formatDate, getStatusColor, getStatusLabel, isOverdue, isDueToday } from '../lib/utils'
 
 export default function Task({ 
   task, 
   subtasks = [], 
   onTaskUpdate,
   onDeleteTask,
-  isSubtask = false 
+  isSubtask = false,
+  draggable = false,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
+  isDragging = false,
+  isDragOver = false,
 }) {
   const [showSubtasks, setShowSubtasks] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
@@ -151,18 +158,32 @@ export default function Task({
   }
 
   const overdue = isOverdue(task.deadline, task.completed_date, localTaskStatus)
+  const dueToday = isDueToday(task.deadline, task.completed_date, localTaskStatus)
 
   return (
     <>
       <div 
+        onDragOver={draggable ? onDragOver : undefined}
+        onDrop={draggable ? onDrop : undefined}
         className={`task-card ${
           localTaskStatus === 'on-hold' ? 'on-hold' : 
           localTaskStatus === 'carry-forward' || localCarryForwardWeeks > 0 ? 'carry-forward' :
           localTaskStatus === 'completed' ? 'completed' : ''
-        } ${isSubtask ? 'ml-8 border-l-4' : ''}`}
+        } ${isSubtask ? 'ml-8 border-l-4' : ''} ${isDragging ? 'opacity-40' : ''} ${isDragOver ? 'border-t-2 border-t-blue-500' : ''}`}
       >
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 flex-1 min-w-0">
+            {draggable && !isEditing && (
+              <span
+                draggable
+                onDragStart={onDragStart}
+                onDragEnd={onDragEnd}
+                className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 select-none flex-shrink-0 leading-none"
+                title="Drag to reorder"
+              >
+                ⠿
+              </span>
+            )}
             <input
               type="checkbox"
               checked={localTaskStatus === 'completed'}
@@ -219,6 +240,11 @@ export default function Task({
                   {overdue && localTaskStatus !== 'completed' && (
                     <span className="badge bg-red-100 text-red-800 text-xs flex-shrink-0">
                       Overdue
+                    </span>
+                  )}
+                  {dueToday && localTaskStatus !== 'completed' && (
+                    <span className="badge bg-yellow-100 text-yellow-800 text-xs flex-shrink-0">
+                      Due today
                     </span>
                   )}
                 </div>
