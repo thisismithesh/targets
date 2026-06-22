@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { getSubtasks } from '../lib/supabase'
+import Stars from './Stars'
 
-export default function TeamMemberCard({ teamMember, weekId, tasks, onTaskUpdate }) {
+export default function TeamMemberCard({ teamMember, weekId, tasks, onTaskUpdate, starCount = 0 }) {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
@@ -28,7 +29,10 @@ export default function TeamMemberCard({ teamMember, weekId, tasks, onTaskUpdate
     <div className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-lg transition-shadow">
       <div className="flex items-start justify-between mb-4">
         <div>
-          <h2 className="text-xl font-bold text-gray-900">{teamMember.name}</h2>
+          <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <span>{teamMember.name}</span>
+            <Stars count={starCount} />
+          </h2>
           <p className="text-sm text-gray-500">{teamMember.team}</p>
         </div>
         <Link
