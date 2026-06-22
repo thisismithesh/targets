@@ -6,6 +6,7 @@ export default function Task({
   task, 
   subtasks = [], 
   onTaskUpdate,
+  onDeleteTask,
   isSubtask = false 
 }) {
   const [showOnHoldComment, setShowOnHoldComment] = useState(false)
@@ -194,6 +195,15 @@ export default function Task({
             >
               ✏️
             </button>
+            {onDeleteTask && (
+              <button
+                onClick={() => onDeleteTask(task.id)}
+                className="px-2 py-1 text-xs bg-gray-200 text-red-600 rounded hover:bg-red-100"
+                title="Delete task"
+              >
+                🗑️
+              </button>
+            )}
             <div className="relative">
               <button
                 onClick={toggleOnHold}
