@@ -133,7 +133,7 @@ export default function AdminChatbot({ teamMembers, weeks, starCounts }) {
           {/* Close button — top-right corner */}
           <button
             onClick={() => setIsOpen(false)}
-            className="absolute top-3 right-5 text-gray-400 hover:text-gray-600 text-lg leading-none"
+            className="absolute top-3 right-4 text-gray-400 hover:text-gray-600 text-lg leading-none"
             title="Close"
           >
             &times;
