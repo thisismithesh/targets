@@ -204,3 +204,57 @@ export async function deleteTeamMember(memberId) {
 
   if (error) throw error
 }
+
+// ── Clean sweeps (stars) ───────────────────────────────────────────
+// A "clean sweep" = a member completed all tasks in a given week.
+// One row per (team_member_id, week_id); unique so a week grants one star.
+
+// Record a clean sweep. Uses upsert so repeat detections are no-ops.
+export async function recordCleanSweep(teamMemberId, weekId) {
+  const { data, error } = await supabase
+    .from('clean_sweeps')
+    .upsert(
+      { team_member_id: teamMemberId, week_id: weekId },
+      { onConflict: 'team_member_id,week_id', ignoreDuplicates: true }
+    )
+    .select()
+
+  if (error) throw error
+  return data
+}
+
+// Remove a clean sweep (e.g. a previously-swept week is no longer complete).
+export async function removeCleanSweep(teamMemberId, weekId) {
+  const { error } = await supabase
+    .from('clean_sweeps')
+    .delete()
+    .eq('team_member_id', teamMemberId)
+    .eq('week_id', weekId)
+
+  if (error) throw error
+}
+
+// Star count for a single member.
+export async function getStarCount(teamMemberId) {
+  const { count, error } = await supabase
+    .from('clean_sweeps')
+    .select('*', { count: 'exact', head: true })
+    .eq('team_member_id', teamMemberId)
+
+  if (error) throw error
+  return count || 0
+}
+
+// Star counts for all members → { [team_member_id]: count }.
+export async function getStarCounts() {
+  const { data, error } = await supabase
+    .from('clean_sweeps')
+    .select('team_member_id')
+
+  if (error) throw error
+  const counts = {}
+  for (const row of data || []) {
+    counts[row.team_member_id] = (counts[row.team_member_id] || 0) + 1
+  }
+  return counts
+}
