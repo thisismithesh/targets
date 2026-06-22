@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { supabase, getSubtasks, getTeamMemberById, getWeekById, createTask, deleteTask } from '../lib/supabase'
+import { supabase, getSubtasks, getTeamMemberById, getWeekById, createTask, updateTask, deleteTask } from '../lib/supabase'
 import Task from '../components/Task'
 import { getWeekLabelShort } from '../lib/utils'
 
@@ -12,7 +12,6 @@ export default function TeamMemberDetail() {
   const [subtaskMap, setSubtaskMap] = useState({})
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [refreshKey, setRefreshKey] = useState(0)
 
   // Add task form state
   const [showAddForm, setShowAddForm] = useState(false)
@@ -32,9 +31,33 @@ export default function TeamMemberDetail() {
     estimated_hours: '',
   })
 
+  // Drag-and-drop reorder state
+  const [draggedId, setDraggedId] = useState(null)
+  const [dragOverId, setDragOverId] = useState(null)
+
   useEffect(() => {
     loadData()
-  }, [memberId, weekId, refreshKey])
+  }, [memberId, weekId])
+
+  const fetchTasks = async () => {
+    const { data: tasksData, error: tasksError } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('team_member_id', memberId)
+      .eq('week_id', weekId)
+      .is('parent_task_id', null)
+      .order('position', { ascending: true })
+      .order('created_at', { ascending: true })
+
+    if (tasksError) throw tasksError
+
+    const list = tasksData || []
+    const map = {}
+    for (const task of list) {
+      map[task.id] = await getSubtasks(task.id)
+    }
+    return { list, map }
+  }
 
   const loadData = async () => {
     try {
@@ -48,21 +71,8 @@ export default function TeamMemberDetail() {
       setTeamMember(member)
       setWeek(w)
 
-      const { data: tasksData, error: tasksError } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('team_member_id', memberId)
-        .eq('week_id', weekId)
-        .is('parent_task_id', null)
-        .order('heading', { ascending: true })
-
-      if (tasksError) throw tasksError
-      setTasks(tasksData || [])
-
-      const map = {}
-      for (const task of tasksData || []) {
-        map[task.id] = await getSubtasks(task.id)
-      }
+      const { list, map } = await fetchTasks()
+      setTasks(list)
       setSubtaskMap(map)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data')
@@ -72,7 +82,16 @@ export default function TeamMemberDetail() {
     }
   }
 
-  const handleTaskUpdate = () => setRefreshKey((prev) => prev + 1)
+  // Silent reload: refresh task data in the background without the loading spinner
+  const handleTaskUpdate = async () => {
+    try {
+      const { list, map } = await fetchTasks()
+      setTasks(list)
+      setSubtaskMap(map)
+    } catch (err) {
+      console.error('Error refreshing tasks:', err)
+    }
+  }
 
   const handleAddTask = async (e) => {
     e.preventDefault()
@@ -81,7 +100,7 @@ export default function TeamMemberDetail() {
       return
     }
     try {
-      await createTask({
+      const created = await createTask({
         team_member_id: memberId,
         week_id: weekId,
         task_name: newTask.task_name,
@@ -89,12 +108,15 @@ export default function TeamMemberDetail() {
         deadline: newTask.deadline || null,
         estimated_hours: newTask.estimated_hours ? parseFloat(newTask.estimated_hours) : null,
         status: 'pending',
-        position: tasks.length,
+        position: nextPosition(),
       })
+      if (created) {
+        setTasks((prev) => [...prev, created])
+        setSubtaskMap((prev) => ({ ...prev, [created.id]: [] }))
+      }
       setNewTask({ task_name: '', heading: 'General', deadline: '', estimated_hours: '' })
       setAddMessage('')
       setShowAddForm(false)
-      handleTaskUpdate()
     } catch (err) {
       setAddMessage('Error adding task')
       console.error(err)
@@ -104,7 +126,7 @@ export default function TeamMemberDetail() {
   const handleAddInlineTask = async (heading) => {
     if (!inlineTask.task_name) return
     try {
-      await createTask({
+      const created = await createTask({
         team_member_id: memberId,
         week_id: weekId,
         task_name: inlineTask.task_name,
@@ -112,11 +134,14 @@ export default function TeamMemberDetail() {
         deadline: inlineTask.deadline || null,
         estimated_hours: inlineTask.estimated_hours ? parseFloat(inlineTask.estimated_hours) : null,
         status: 'pending',
-        position: tasks.length,
+        position: nextPosition(),
       })
+      if (created) {
+        setTasks((prev) => [...prev, created])
+        setSubtaskMap((prev) => ({ ...prev, [created.id]: [] }))
+      }
       setInlineTask({ task_name: '', deadline: '', estimated_hours: '' })
       setInlineHeading(null)
-      handleTaskUpdate()
     } catch (err) {
       console.error('Error adding task:', err)
     }
@@ -124,11 +149,54 @@ export default function TeamMemberDetail() {
 
   const handleDeleteTask = async (taskId) => {
     if (!window.confirm('Delete this task?')) return
+    // Optimistically remove from local state for an immediate, clean update
+    setTasks((prev) => prev.filter((t) => t.id !== taskId))
+    setSubtaskMap((prev) => {
+      const next = { ...prev }
+      delete next[taskId]
+      return next
+    })
     try {
       await deleteTask(taskId)
-      handleTaskUpdate()
     } catch (err) {
       console.error('Error deleting task:', err)
+      handleTaskUpdate() // resync on failure
+    }
+  }
+
+  // Next position value = one past the current highest position
+  const nextPosition = () =>
+    tasks.reduce((max, t) => Math.max(max, t.position ?? 0), -1) + 1
+
+  // Reorder a task within its heading group, then persist positions
+  const handleReorder = async (heading, fromId, toId) => {
+    setDraggedId(null)
+    setDragOverId(null)
+    if (fromId === toId) return
+
+    const group = tasks.filter((t) => t.heading === heading)
+    const others = tasks.filter((t) => t.heading !== heading)
+    const fromIndex = group.findIndex((t) => t.id === fromId)
+    const toIndex = group.findIndex((t) => t.id === toId)
+    if (fromIndex === -1 || toIndex === -1) return
+
+    const reordered = [...group]
+    const [moved] = reordered.splice(fromIndex, 1)
+    reordered.splice(toIndex, 0, moved)
+
+    // Reassign sequential positions within the group
+    const repositioned = reordered.map((t, i) => ({ ...t, position: i }))
+
+    // Update local state immediately (preserve overall task array order by heading groups)
+    const byId = new Map(repositioned.map((t) => [t.id, t]))
+    setTasks((prev) => prev.map((t) => byId.get(t.id) || t))
+
+    // Persist new positions
+    try {
+      await Promise.all(repositioned.map((t) => updateTask(t.id, { position: t.position })))
+    } catch (err) {
+      console.error('Error saving order:', err)
+      handleTaskUpdate()
     }
   }
 
@@ -281,7 +349,7 @@ export default function TeamMemberDetail() {
               {Object.entries(tasksByHeading).map(([heading, headingTasks]) => (
                 <div key={heading} className="mb-6">
                   <div className="flex items-center justify-between mb-3 pb-2 border-b border-gray-200">
-                    <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                    <h2 className="text-sm font-semibold text-gray-700 tracking-wide">
                       {heading}
                     </h2>
                     <button
@@ -303,6 +371,26 @@ export default function TeamMemberDetail() {
                         subtasks={subtaskMap[task.id] || []}
                         onTaskUpdate={handleTaskUpdate}
                         onDeleteTask={handleDeleteTask}
+                        draggable
+                        isDragging={draggedId === task.id}
+                        isDragOver={dragOverId === task.id && draggedId !== task.id}
+                        onDragStart={(e) => {
+                          setDraggedId(task.id)
+                          e.dataTransfer.effectAllowed = 'move'
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          e.dataTransfer.dropEffect = 'move'
+                          if (dragOverId !== task.id) setDragOverId(task.id)
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          if (draggedId) handleReorder(heading, draggedId, task.id)
+                        }}
+                        onDragEnd={() => {
+                          setDraggedId(null)
+                          setDragOverId(null)
+                        }}
                       />
                     ))}
                     {inlineHeading === heading && (
