@@ -1,0 +1,19 @@
+/* Main App Styles */
+nav {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+main {
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
