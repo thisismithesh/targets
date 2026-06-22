@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase, getSubtasks, getTeamMemberById, getWeekById, createTask, deleteTask } from '../lib/supabase'
 import Task from '../components/Task'
-import { getWeekLabel } from '../lib/utils'
+import { getWeekLabelShort } from '../lib/utils'
 
 const HEADINGS = ['General', 'Development', 'Design', 'Research', 'Meetings', 'Other']
 
@@ -139,7 +139,7 @@ export default function TeamMemberDetail() {
             <div>
               <h1 className="text-3xl font-bold text-gray-900 mb-1">{teamMember.name}</h1>
               <p className="text-gray-500 text-sm mb-1">{teamMember.team}</p>
-              <p className="text-lg text-gray-600">{getWeekLabel(week.week_start_date)}</p>
+              <p className="text-lg text-gray-600">{getWeekLabelShort(week.week_start_date)}</p>
             </div>
             <button
               onClick={() => setShowAddForm((v) => !v)}
