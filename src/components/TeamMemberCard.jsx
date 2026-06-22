@@ -1,33 +1,13 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { getSubtasks } from '../lib/supabase'
-import TaskSection from './TaskSection'
 
 export default function TeamMemberCard({ teamMember, weekId, tasks, onTaskUpdate }) {
-  const [subtaskMap, setSubtaskMap] = useState({})
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    loadSubtasks()
-  }, [tasks, weekId])
-
-  const loadSubtasks = async () => {
-    setIsLoading(true)
-    const map = {}
-    for (const task of tasks) {
-      const subtasks = await getSubtasks(task.id)
-      map[task.id] = subtasks
-    }
-    setSubtaskMap(map)
     setIsLoading(false)
-  }
-
-  // Group tasks by heading
-  const tasksByHeading = {}
-  tasks.forEach((task) => {
-    if (!tasksByHeading[task.heading]) tasksByHeading[task.heading] = []
-    tasksByHeading[task.heading].push(task)
-  })
+  }, [tasks, weekId])
 
   if (isLoading) {
     return (
@@ -55,42 +35,24 @@ export default function TeamMemberCard({ teamMember, weekId, tasks, onTaskUpdate
           to={`/team/${teamMember.id}/week/${weekId}`}
           className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
         >
-          View Details
+          View Targets
         </Link>
       </div>
 
-      <div className="flex gap-4 mb-4 pb-4 border-b border-gray-200">
-        <div className="text-center">
+      <div className="flex gap-4 pb-4 border-b border-gray-200">
+        <div className="text-center flex-1">
           <div className="text-2xl font-bold text-green-600">{completedCount}</div>
           <div className="text-xs text-gray-500">Completed</div>
         </div>
-        <div className="text-center">
+        <div className="text-center flex-1">
           <div className="text-2xl font-bold text-yellow-600">{pendingCount}</div>
           <div className="text-xs text-gray-500">Pending</div>
         </div>
-        <div className="text-center">
+        <div className="text-center flex-1">
           <div className="text-2xl font-bold text-red-600">{onHoldCount}</div>
           <div className="text-xs text-gray-500">On Hold</div>
         </div>
       </div>
-
-      {tasks.length === 0 ? (
-        <p className="text-gray-500 text-sm text-center py-8">
-          No tasks assigned for this week yet.
-        </p>
-      ) : (
-        <div>
-          {Object.entries(tasksByHeading).map(([heading, headingTasks]) => (
-            <TaskSection
-              key={heading}
-              heading={heading}
-              tasks={headingTasks}
-              subtaskMap={subtaskMap}
-              onTaskUpdate={onTaskUpdate}
-            />
-          ))}
-        </div>
-      )}
     </div>
   )
 }
