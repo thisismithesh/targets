@@ -32,7 +32,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] -my-8 flex items-center justify-center px-4">
+    <div className="min-h-[calc(100vh-4rem)] -my-8 flex items-center justify-center px-4 pb-24">
       <div className="bg-white rounded-lg border border-gray-200 p-8 w-full max-w-sm shadow-sm">
         <h1 className="text-2xl font-bold text-gray-900 mb-1">Admin Login</h1>
         <p className="text-sm text-gray-500 mb-6">Weekly Targets — restricted area</p>
