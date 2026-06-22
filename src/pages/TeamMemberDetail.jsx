@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { supabase, getSubtasks, getTeamMemberById, getWeekById, createTask, updateTask, deleteTask, recordCleanSweep, removeCleanSweep, getStarCount } from '../lib/supabase'
+import { supabase, getSubtasks, getTeamMemberById, getWeekById, createTask, updateTask, deleteTask, recordCleanSweep, removeCleanSweep, getStarCount, getCommentCounts, getHeadingOrders, saveHeadingOrder } from '../lib/supabase'
 import Task from '../components/Task'
 import CleanSweepPopup from '../components/CleanSweepPopup'
 import Stars from '../components/Stars'
@@ -12,6 +12,8 @@ export default function TeamMemberDetail() {
   const [week, setWeek] = useState(null)
   const [tasks, setTasks] = useState([])
   const [subtaskMap, setSubtaskMap] = useState({})
+  const [commentCounts, setCommentCounts] = useState({})
+  const [headingOrders, setHeadingOrders] = useState({}) // { heading: position }
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -68,7 +70,14 @@ export default function TeamMemberDetail() {
     for (const task of list) {
       map[task.id] = await getSubtasks(task.id)
     }
-    return { list, map }
+    // Comment counts for all top-level tasks
+    let counts = {}
+    try {
+      counts = await getCommentCounts(list.map((t) => t.id))
+    } catch (e) {
+      console.error('Error loading comment counts:', e)
+    }
+    return { list, map, counts }
   }
 
   const loadData = async () => {
@@ -83,9 +92,19 @@ export default function TeamMemberDetail() {
       setTeamMember(member)
       setWeek(w)
 
-      const { list, map } = await fetchTasks()
+      const { list, map, counts } = await fetchTasks()
       setTasks(list)
       setSubtaskMap(map)
+      setCommentCounts(counts)
+      // Load any saved heading order for this member+week
+      try {
+        const orders = await getHeadingOrders(memberId, weekId)
+        const orderMap = {}
+        orders.forEach((o) => { orderMap[o.heading] = o.position })
+        setHeadingOrders(orderMap)
+      } catch (e) {
+        console.error('Error loading heading order:', e)
+      }
       // Establish the sweep baseline silently (no popup on initial load,
       // so revisiting an already-completed week doesn't re-congratulate)
       setWasSwept(computeSwept(list))
@@ -105,9 +124,10 @@ export default function TeamMemberDetail() {
   // Silent reload: refresh task data in the background without the loading spinner
   const handleTaskUpdate = async () => {
     try {
-      const { list, map } = await fetchTasks()
+      const { list, map, counts } = await fetchTasks()
       setTasks(list)
       setSubtaskMap(map)
+      setCommentCounts(counts)
 
       const swept = computeSwept(list)
       // Fire only on the transition into a swept state
@@ -231,6 +251,40 @@ export default function TeamMemberDetail() {
     }
   }
 
+  // Visual indent toggle (purely cosmetic; persisted via is_indented)
+  const setIndent = async (taskId, value) => {
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, is_indented: value } : t)))
+    try {
+      await updateTask(taskId, { is_indented: value })
+    } catch (err) {
+      console.error('Error saving indent:', err)
+      handleTaskUpdate()
+    }
+  }
+
+  // Move an entire heading group up or down, then persist heading order.
+  const moveHeading = async (orderedHeadings, index, direction) => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1
+    if (targetIndex < 0 || targetIndex >= orderedHeadings.length) return
+
+    const reordered = [...orderedHeadings]
+    const [moved] = reordered.splice(index, 1)
+    reordered.splice(targetIndex, 0, moved)
+
+    // Apply locally
+    const orderMap = {}
+    reordered.forEach((h, i) => { orderMap[h] = i })
+    setHeadingOrders(orderMap)
+
+    // Persist
+    try {
+      await saveHeadingOrder(memberId, weekId, reordered)
+    } catch (err) {
+      console.error('Error saving heading order:', err)
+      handleTaskUpdate()
+    }
+  }
+
   // Group tasks by heading, ordered within each group by position then created_at
   const tasksByHeading = {}
   tasks.forEach((task) => {
@@ -244,6 +298,28 @@ export default function TeamMemberDetail() {
       if (pa !== pb) return pa - pb
       return new Date(a.created_at) - new Date(b.created_at)
     })
+  })
+
+  // Earliest task creation time per heading (for default ascending order)
+  const headingCreatedAt = {}
+  Object.keys(tasksByHeading).forEach((heading) => {
+    headingCreatedAt[heading] = tasksByHeading[heading].reduce((min, t) => {
+      const ts = new Date(t.created_at).getTime()
+      return ts < min ? ts : min
+    }, Infinity)
+  })
+
+  // Ordered list of headings: use saved heading order if present,
+  // otherwise fall back to ascending creation time.
+  const orderedHeadings = Object.keys(tasksByHeading).sort((a, b) => {
+    const oa = headingOrders[a]
+    const ob = headingOrders[b]
+    const hasA = oa !== undefined
+    const hasB = ob !== undefined
+    if (hasA && hasB) return oa - ob
+    if (hasA) return -1
+    if (hasB) return 1
+    return headingCreatedAt[a] - headingCreatedAt[b]
   })
 
   const completedCount = tasks.filter((t) => t.status === 'completed').length
@@ -389,12 +465,38 @@ export default function TeamMemberDetail() {
             </div>
           ) : (
             <div className="bg-white rounded-lg border border-gray-200 p-6">
-              {Object.entries(tasksByHeading).map(([heading, headingTasks]) => (
+              {orderedHeadings.map((heading, hIndex) => {
+                const headingTasks = tasksByHeading[heading]
+                return (
                 <div key={heading} className="mb-6">
                   <div className="flex items-center justify-between mb-3 pb-2 border-b border-gray-200">
-                    <h2 className="text-sm font-semibold text-gray-700 tracking-wide">
-                      {heading}
-                    </h2>
+                    <div className="flex items-center gap-2">
+                      <div className="flex flex-col -my-1">
+                        <button
+                          onClick={() => moveHeading(orderedHeadings, hIndex, 'up')}
+                          disabled={hIndex === 0}
+                          className={`px-1 leading-none text-[10px] ${
+                            hIndex > 0 ? 'text-gray-400 hover:text-gray-700' : 'text-gray-200 cursor-default'
+                          }`}
+                          title="Move section up"
+                        >
+                          ▲
+                        </button>
+                        <button
+                          onClick={() => moveHeading(orderedHeadings, hIndex, 'down')}
+                          disabled={hIndex === orderedHeadings.length - 1}
+                          className={`px-1 leading-none text-[10px] ${
+                            hIndex < orderedHeadings.length - 1 ? 'text-gray-400 hover:text-gray-700' : 'text-gray-200 cursor-default'
+                          }`}
+                          title="Move section down"
+                        >
+                          ▼
+                        </button>
+                      </div>
+                      <h2 className="text-sm font-semibold text-gray-700 tracking-wide">
+                        {heading}
+                      </h2>
+                    </div>
                     <button
                       onClick={() => {
                         setInlineHeading(heading)
@@ -414,10 +516,13 @@ export default function TeamMemberDetail() {
                         subtasks={subtaskMap[task.id] || []}
                         onTaskUpdate={handleTaskUpdate}
                         onDeleteTask={handleDeleteTask}
+                        commentCount={commentCounts[task.id] || 0}
                         canMoveUp={index > 0}
                         canMoveDown={index < headingTasks.length - 1}
                         onMoveUp={() => moveTask(headingTasks, index, 'up')}
                         onMoveDown={() => moveTask(headingTasks, index, 'down')}
+                        onIndent={() => setIndent(task.id, true)}
+                        onOutdent={() => setIndent(task.id, false)}
                       />
                     ))}
                     {inlineHeading === heading && (
@@ -465,7 +570,8 @@ export default function TeamMemberDetail() {
                     )}
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </>
