@@ -22,7 +22,7 @@ export default function AdminChatbot({ teamMembers, weeks, starCounts }) {
   const [messages, setMessages] = useState([]) // { role: 'user'|'assistant', text }
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [scope, setScope] = useState(4) // number of recent weeks: 1, 4, or 12
+  const [scope, setScope] = useState(1) // number of recent weeks: 1, 4, or 12
   const scrollRef = useRef(null)
 
   useEffect(() => {
@@ -133,11 +133,11 @@ export default function AdminChatbot({ teamMembers, weeks, starCounts }) {
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <div>
-              <h2 className="text-base font-bold text-gray-900 leading-tight">Ask about the data</h2>
+              <h2 className="text-lg font-bold text-gray-900 leading-tight">Ask about the data</h2>
               <select
                 value={scope}
                 onChange={(e) => setScope(Number(e.target.value))}
-                className="mt-1 w-36 text-xs text-gray-600 bg-white border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                className="mt-1.5 w-36 text-xs text-gray-600 bg-white border border-gray-300 rounded-md pl-2.5 pr-7 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
                 title="Choose how much data to include"
               >
                 {scopeOptions.map((o) => (
@@ -168,7 +168,7 @@ export default function AdminChatbot({ teamMembers, weeks, starCounts }) {
           {/* Messages */}
           <div
             ref={scrollRef}
-            className="flex-1 min-h-[440px] overflow-y-auto bg-gray-50 p-4 space-y-3"
+            className="flex-1 min-h-[520px] overflow-y-auto bg-gray-50 p-4 space-y-3"
           >
             {messages.length === 0 && (
               <div className="text-sm text-gray-400 space-y-1">
