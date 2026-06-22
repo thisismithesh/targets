@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase, getTeamMembers, getCurrentWeek, getOrCreateWeek } from '../lib/supabase'
+import { supabase, getTeamMembers, getCurrentWeek, getOrCreateWeek, getStarCounts } from '../lib/supabase'
 import TeamMemberCard from '../components/TeamMemberCard'
 import { getWeekLabelShort } from '../lib/utils'
 import { addWeeks, subWeeks, startOfWeek, format, parseISO } from 'date-fns'
@@ -15,6 +15,7 @@ export default function Dashboard() {
   const [week, setWeek] = useState(null)
   const [teamMembers, setTeamMembers] = useState([])
   const [tasksByMember, setTasksByMember] = useState({})
+  const [starCounts, setStarCounts] = useState({})
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -60,6 +61,12 @@ export default function Dashboard() {
         })
       }
       setTasksByMember(grouped)
+
+      try {
+        setStarCounts(await getStarCounts())
+      } catch (e) {
+        console.error('Error loading stars:', e)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data')
       console.error('Error loading data:', err)
@@ -186,6 +193,7 @@ export default function Dashboard() {
               weekId={week?.id}
               tasks={tasksByMember[member.id] || []}
               onTaskUpdate={handleTaskUpdate}
+              starCount={starCounts[member.id] || 0}
             />
           ))}
         </div>
