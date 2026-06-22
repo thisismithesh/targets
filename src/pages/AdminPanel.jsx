@@ -271,9 +271,9 @@ export default function AdminPanel() {
                 {currentWeekId && selectedWeekId !== currentWeekId && (
                   <button
                     onClick={() => setSelectedWeekId(currentWeekId)}
-                    className="px-2 py-0.5 text-xs text-blue-600 hover:text-blue-700 font-medium"
+                    className="px-2 py-0.5 text-xs text-blue-600 hover:text-blue-700 font-medium underline"
                   >
-                    Current week
+                    Back to this week
                   </button>
                 )}
               </div>
