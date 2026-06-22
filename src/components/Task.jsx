@@ -20,106 +20,97 @@ export default function Task({
   const [showHoldEditor, setShowHoldEditor] = useState(false)
   const [carryForwardWeeks, setCarryForwardWeeks] = useState(task.carry_forward_weeks || 0)
   const [showCarryForwardEditor, setShowCarryForwardEditor] = useState(false)
+  const [localTaskStatus, setLocalTaskStatus] = useState(task.status)
+  const [localCarryForwardWeeks, setLocalCarryForwardWeeks] = useState(task.carry_forward_weeks || 0)
   const holdTooltipRef = useRef(null)
   const carryForwardTooltipRef = useRef(null)
-  const statusColor = getStatusColor(task.status, task.carry_forward_weeks)
-  let holdTooltipTimer = null
-  let carryForwardTooltipTimer = null
+  const tooltipContainerRef = useRef(null)
+  const statusColor = getStatusColor(localTaskStatus, localCarryForwardWeeks)
+  const holdTooltipTimer = useRef(null)
+  const carryForwardTooltipTimer = useRef(null)
 
   const handleHoldMouseEnter = () => {
-    if (task.status === 'on-hold') {
-      holdTooltipTimer = setTimeout(() => {
+    if (localTaskStatus === 'on-hold') {
+      holdTooltipTimer.current = setTimeout(() => {
         setShowHoldTooltip(true)
       }, 1000)
     }
   }
 
   const handleHoldMouseLeave = () => {
-    if (holdTooltipTimer) clearTimeout(holdTooltipTimer)
-    setShowHoldTooltip(false)
+    if (holdTooltipTimer.current) clearTimeout(holdTooltipTimer.current)
   }
 
   const handleCarryForwardMouseEnter = () => {
-    if (task.carry_forward_weeks > 0) {
-      carryForwardTooltipTimer = setTimeout(() => {
+    if (localCarryForwardWeeks > 0) {
+      carryForwardTooltipTimer.current = setTimeout(() => {
         setShowCarryForwardTooltip(true)
       }, 1000)
     }
   }
 
   const handleCarryForwardMouseLeave = () => {
-    if (carryForwardTooltipTimer) clearTimeout(carryForwardTooltipTimer)
-    setShowCarryForwardTooltip(false)
+    if (carryForwardTooltipTimer.current) clearTimeout(carryForwardTooltipTimer.current)
   }
 
   const toggleOnHold = async () => {
-    const newStatus = task.status === 'on-hold' ? 'pending' : 'on-hold'
-    const { error } = await supabase
+    const newStatus = localTaskStatus === 'on-hold' ? 'pending' : 'on-hold'
+    setLocalTaskStatus(newStatus)
+    
+    await supabase
       .from('tasks')
       .update({ 
         status: newStatus,
-        on_hold_reason: newStatus === 'on-hold' ? task.on_hold_reason || '' : null
+        on_hold_reason: newStatus === 'on-hold' ? holdReason || '' : null
       })
       .eq('id', task.id)
-
-    if (!error) {
-      onTaskUpdate()
-    }
   }
 
   const toggleCarryForward = async () => {
-    const newWeeks = task.carry_forward_weeks > 0 ? 0 : 1
-    const { error } = await supabase
+    const newWeeks = localCarryForwardWeeks > 0 ? 0 : 1
+    setLocalCarryForwardWeeks(newWeeks)
+    
+    await supabase
       .from('tasks')
       .update({ 
         carry_forward_weeks: newWeeks
       })
       .eq('id', task.id)
-
-    if (!error) {
-      onTaskUpdate()
-    }
   }
 
   const toggleCompleted = async () => {
-    const newStatus = task.status === 'completed' ? 'pending' : 'completed'
-    const { error } = await supabase
+    const newStatus = localTaskStatus === 'completed' ? 'pending' : 'completed'
+    setLocalTaskStatus(newStatus)
+    
+    await supabase
       .from('tasks')
       .update({ 
         status: newStatus,
         completed_date: newStatus === 'completed' ? new Date().toISOString().split('T')[0] : null
       })
       .eq('id', task.id)
-
-    if (!error) {
-      onTaskUpdate()
-    }
   }
 
   const saveHoldReason = async () => {
-    const { error } = await supabase
+    await supabase
       .from('tasks')
       .update({ on_hold_reason: holdReason })
       .eq('id', task.id)
 
-    if (!error) {
-      setShowHoldEditor(false)
-    }
+    setShowHoldEditor(false)
   }
 
   const saveCarryForwardWeeks = async () => {
-    const { error } = await supabase
+    await supabase
       .from('tasks')
       .update({ carry_forward_weeks: carryForwardWeeks })
       .eq('id', task.id)
 
-    if (!error) {
-      setShowCarryForwardEditor(false)
-    }
+    setShowCarryForwardEditor(false)
   }
 
   const saveTaskEdit = async () => {
-    const { error } = await supabase
+    await supabase
       .from('tasks')
       .update({
         task_name: editedName,
@@ -128,28 +119,26 @@ export default function Task({
       })
       .eq('id', task.id)
 
-    if (!error) {
-      setIsEditing(false)
-      onTaskUpdate()
-    }
+    setIsEditing(false)
+    onTaskUpdate()
   }
 
-  const overdue = isOverdue(task.deadline, task.completed_date, task.status)
+  const overdue = isOverdue(task.deadline, task.completed_date, localTaskStatus)
 
   return (
     <>
       <div 
         className={`task-card ${
-          task.status === 'on-hold' ? 'on-hold' : 
-          task.status === 'carry-forward' || task.carry_forward_weeks > 0 ? 'carry-forward' :
-          task.status === 'completed' ? 'completed' : ''
+          localTaskStatus === 'on-hold' ? 'on-hold' : 
+          localTaskStatus === 'carry-forward' || localCarryForwardWeeks > 0 ? 'carry-forward' :
+          localTaskStatus === 'completed' ? 'completed' : ''
         } ${isSubtask ? 'ml-8 border-l-4' : ''}`}
       >
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <input
               type="checkbox"
-              checked={task.status === 'completed'}
+              checked={localTaskStatus === 'completed'}
               onChange={toggleCompleted}
               className="w-4 h-4 rounded border-gray-300 cursor-pointer flex-shrink-0"
             />
@@ -162,12 +151,13 @@ export default function Task({
                   onChange={(e) => setEditedName(e.target.value)}
                   className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
                   autoFocus
+                  placeholder="Task name"
                 />
                 <input
                   type="date"
                   value={editedDeadline}
                   onChange={(e) => setEditedDeadline(e.target.value)}
-                  className="px-2 py-1 border border-gray-300 rounded text-sm w-32"
+                  className="px-2 py-1 border border-gray-300 rounded text-xs w-24"
                 />
                 <input
                   type="number"
@@ -175,7 +165,7 @@ export default function Task({
                   value={editedHours}
                   onChange={(e) => setEditedHours(e.target.value)}
                   placeholder="h"
-                  className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
+                  className="w-12 px-2 py-1 border border-gray-300 rounded text-xs"
                 />
                 <button
                   onClick={saveTaskEdit}
@@ -195,11 +185,11 @@ export default function Task({
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 
                     onClick={() => setIsEditing(true)}
-                    className={`text-sm font-medium text-gray-900 cursor-pointer hover:underline truncate ${task.status === 'completed' ? 'line-through text-gray-500' : ''}`}
+                    className={`text-sm font-medium text-gray-900 cursor-pointer hover:underline truncate ${localTaskStatus === 'completed' ? 'line-through text-gray-500' : ''}`}
                   >
                     {task.task_name}
                   </h3>
-                  {overdue && task.status !== 'completed' && (
+                  {overdue && localTaskStatus !== 'completed' && (
                     <span className="badge bg-red-100 text-red-800 text-xs flex-shrink-0">
                       Overdue
                     </span>
@@ -210,7 +200,7 @@ export default function Task({
           </div>
 
           {!isEditing && (
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex items-center gap-1.5 flex-shrink-0">
               <div className="text-xs text-gray-600 whitespace-nowrap">
                 {task.deadline && (
                   <span>{formatDate(task.deadline)}</span>
@@ -222,24 +212,28 @@ export default function Task({
               </div>
 
               {/* Hold Icon Button */}
-              <div className="relative">
+              <div 
+                className="relative"
+                onMouseEnter={handleHoldMouseEnter}
+                onMouseLeave={handleHoldMouseLeave}
+              >
                 <button
                   onClick={toggleOnHold}
-                  onMouseEnter={handleHoldMouseEnter}
-                  onMouseLeave={handleHoldMouseLeave}
-                  className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
-                    task.status === 'on-hold'
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold transition-colors flex-shrink-0 ${
+                    localTaskStatus === 'on-hold'
                       ? 'bg-red-500 text-white'
-                      : 'bg-gray-200 text-gray-600 hover:bg-red-200'
+                      : 'bg-red-200 text-red-600 hover:bg-red-300'
                   }`}
                   title="Hold status"
                 >
                   •
                 </button>
-                {showHoldTooltip && task.status === 'on-hold' && (
+                {showHoldTooltip && localTaskStatus === 'on-hold' && (
                   <div
                     ref={holdTooltipRef}
                     className="absolute right-0 top-full mt-1 bg-white border border-gray-300 rounded shadow-lg p-2 w-48 z-50 text-xs"
+                    onMouseEnter={handleHoldMouseEnter}
+                    onMouseLeave={handleHoldMouseLeave}
                   >
                     <p className="font-medium text-gray-700 mb-1">Hold Reason:</p>
                     {showHoldEditor ? (
@@ -274,24 +268,28 @@ export default function Task({
               </div>
 
               {/* Carry Forward Icon Button */}
-              <div className="relative">
+              <div 
+                className="relative"
+                onMouseEnter={handleCarryForwardMouseEnter}
+                onMouseLeave={handleCarryForwardMouseLeave}
+              >
                 <button
                   onClick={toggleCarryForward}
-                  onMouseEnter={handleCarryForwardMouseEnter}
-                  onMouseLeave={handleCarryForwardMouseLeave}
-                  className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
-                    task.carry_forward_weeks > 0
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold transition-colors flex-shrink-0 ${
+                    localCarryForwardWeeks > 0
                       ? 'bg-purple-500 text-white'
-                      : 'bg-gray-200 text-gray-600 hover:bg-purple-200'
+                      : 'bg-purple-200 text-purple-600 hover:bg-purple-300'
                   }`}
                   title="Carry forward status"
                 >
                   •
                 </button>
-                {showCarryForwardTooltip && task.carry_forward_weeks > 0 && (
+                {showCarryForwardTooltip && localCarryForwardWeeks > 0 && (
                   <div
                     ref={carryForwardTooltipRef}
                     className="absolute right-0 top-full mt-1 bg-white border border-gray-300 rounded shadow-lg p-2 w-48 z-50 text-xs"
+                    onMouseEnter={handleCarryForwardMouseEnter}
+                    onMouseLeave={handleCarryForwardMouseLeave}
                   >
                     <p className="font-medium text-gray-700 mb-1">Carry Forward:</p>
                     {showCarryForwardEditor ? (
