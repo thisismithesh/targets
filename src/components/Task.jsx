@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, getTaskComments, addTaskComment, deleteTaskComment } from '../lib/supabase'
 import { formatDate, getStatusColor, getStatusLabel, isOverdue, isDueToday } from '../lib/utils'
 
 export default function Task({ 
@@ -12,78 +12,81 @@ export default function Task({
   onMoveDown,
   canMoveUp = false,
   canMoveDown = false,
+  onIndent,
+  onOutdent,
+  commentCount = 0,
 }) {
   const [showSubtasks, setShowSubtasks] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
   const [editedName, setEditedName] = useState(task.task_name)
   const [editedDeadline, setEditedDeadline] = useState(task.deadline || '')
   const [editedHours, setEditedHours] = useState(task.estimated_hours || '')
-  const [showHoldTooltip, setShowHoldTooltip] = useState(false)
-  const [showCarryForwardTooltip, setShowCarryForwardTooltip] = useState(false)
   const [holdReason, setHoldReason] = useState(task.on_hold_reason || '')
-  const [showHoldEditor, setShowHoldEditor] = useState(false)
   const [carryForwardWeeks, setCarryForwardWeeks] = useState(task.carry_forward_weeks || 0)
-  const [showCarryForwardEditor, setShowCarryForwardEditor] = useState(false)
   const [localTaskStatus, setLocalTaskStatus] = useState(task.status)
   const [localCarryForwardWeeks, setLocalCarryForwardWeeks] = useState(task.carry_forward_weeks || 0)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
-  const holdTooltipRef = useRef(null)
-  const carryForwardTooltipRef = useRef(null)
-  const tooltipContainerRef = useRef(null)
+
+  // Comments
+  const [showComments, setShowComments] = useState(false)
+  const [comments, setComments] = useState([])
+  const [newComment, setNewComment] = useState('')
+  const [commentsLoaded, setCommentsLoaded] = useState(false)
+  const [localCommentCount, setLocalCommentCount] = useState(commentCount)
+  const commentWrapperRef = useRef(null)
+
   const statusColor = getStatusColor(localTaskStatus, localCarryForwardWeeks)
-  const holdTooltipTimer = useRef(null)
-  const carryForwardTooltipTimer = useRef(null)
-  const holdWrapperRef = useRef(null)
-  const carryForwardWrapperRef = useRef(null)
 
-  const handleHoldMouseEnter = () => {
-    if (localTaskStatus === 'on-hold') {
-      holdTooltipTimer.current = setTimeout(() => {
-        setShowHoldTooltip(true)
-      }, 1000)
+  // Load comments when the popover opens (once)
+  useEffect(() => {
+    if (showComments && !commentsLoaded) {
+      getTaskComments(task.id)
+        .then((rows) => {
+          setComments(rows)
+          setLocalCommentCount(rows.length)
+          setCommentsLoaded(true)
+        })
+        .catch((e) => console.error('Error loading comments:', e))
     }
-  }
+  }, [showComments, commentsLoaded, task.id])
 
-  const handleHoldMouseLeave = () => {
-    if (holdTooltipTimer.current) clearTimeout(holdTooltipTimer.current)
-  }
-
-  const handleCarryForwardMouseEnter = () => {
-    if (localCarryForwardWeeks > 0) {
-      carryForwardTooltipTimer.current = setTimeout(() => {
-        setShowCarryForwardTooltip(true)
-      }, 1000)
-    }
-  }
-
-  const handleCarryForwardMouseLeave = () => {
-    if (carryForwardTooltipTimer.current) clearTimeout(carryForwardTooltipTimer.current)
-  }
-
-  // Dismiss either tooltip when clicking anywhere outside of it
+  // Close comment popover when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (
-        showHoldTooltip &&
-        holdWrapperRef.current &&
-        !holdWrapperRef.current.contains(event.target)
+        showComments &&
+        commentWrapperRef.current &&
+        !commentWrapperRef.current.contains(event.target)
       ) {
-        setShowHoldTooltip(false)
-        setShowHoldEditor(false)
-      }
-      if (
-        showCarryForwardTooltip &&
-        carryForwardWrapperRef.current &&
-        !carryForwardWrapperRef.current.contains(event.target)
-      ) {
-        setShowCarryForwardTooltip(false)
-        setShowCarryForwardEditor(false)
+        setShowComments(false)
       }
     }
-
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [showHoldTooltip, showCarryForwardTooltip])
+  }, [showComments])
+
+  const handleAddComment = async () => {
+    const body = newComment.trim()
+    if (!body) return
+    try {
+      const created = await addTaskComment(task.id, body)
+      setComments((prev) => [...prev, created])
+      setLocalCommentCount((c) => c + 1)
+      setNewComment('')
+    } catch (e) {
+      console.error('Error adding comment:', e)
+    }
+  }
+
+  const handleDeleteComment = async (commentId) => {
+    try {
+      await deleteTaskComment(commentId)
+      setComments((prev) => prev.filter((c) => c.id !== commentId))
+      setLocalCommentCount((c) => Math.max(0, c - 1))
+    } catch (e) {
+      console.error('Error deleting comment:', e)
+    }
+  }
 
   const toggleOnHold = async () => {
     const newStatus = localTaskStatus === 'on-hold' ? 'pending' : 'on-hold'
@@ -125,24 +128,6 @@ export default function Task({
     if (onTaskUpdate) onTaskUpdate()
   }
 
-  const saveHoldReason = async () => {
-    await supabase
-      .from('tasks')
-      .update({ on_hold_reason: holdReason })
-      .eq('id', task.id)
-
-    setShowHoldEditor(false)
-  }
-
-  const saveCarryForwardWeeks = async () => {
-    await supabase
-      .from('tasks')
-      .update({ carry_forward_weeks: carryForwardWeeks })
-      .eq('id', task.id)
-
-    setShowCarryForwardEditor(false)
-  }
-
   const saveTaskEdit = async () => {
     await supabase
       .from('tasks')
@@ -167,32 +152,56 @@ export default function Task({
           localTaskStatus === 'on-hold' ? 'on-hold' : 
           localTaskStatus === 'carry-forward' || localCarryForwardWeeks > 0 ? 'carry-forward' :
           localTaskStatus === 'completed' ? 'completed' : ''
-        } ${isSubtask ? 'ml-8 border-l-4' : ''} transition-shadow`}
+        } ${isSubtask ? 'ml-8 border-l-4' : ''} ${task.is_indented ? 'ml-8' : ''} transition-shadow`}
       >
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             {(onMoveUp || onMoveDown) && !isEditing && (
-              <div className="flex flex-col flex-shrink-0 -my-1">
-                <button
-                  onClick={onMoveUp}
-                  disabled={!canMoveUp}
-                  className={`px-1.5 leading-none text-xs ${
-                    canMoveUp ? 'text-gray-400 hover:text-gray-700' : 'text-gray-200 cursor-default'
-                  }`}
-                  title="Move up"
-                >
-                  ▲
-                </button>
-                <button
-                  onClick={onMoveDown}
-                  disabled={!canMoveDown}
-                  className={`px-1.5 leading-none text-xs ${
-                    canMoveDown ? 'text-gray-400 hover:text-gray-700' : 'text-gray-200 cursor-default'
-                  }`}
-                  title="Move down"
-                >
-                  ▼
-                </button>
+              <div className="flex items-center flex-shrink-0 -my-1">
+                <div className="flex flex-col">
+                  <button
+                    onClick={onMoveUp}
+                    disabled={!canMoveUp}
+                    className={`px-1 leading-none text-xs ${
+                      canMoveUp ? 'text-gray-400 hover:text-gray-700' : 'text-gray-200 cursor-default'
+                    }`}
+                    title="Move up"
+                  >
+                    ▲
+                  </button>
+                  <button
+                    onClick={onMoveDown}
+                    disabled={!canMoveDown}
+                    className={`px-1 leading-none text-xs ${
+                      canMoveDown ? 'text-gray-400 hover:text-gray-700' : 'text-gray-200 cursor-default'
+                    }`}
+                    title="Move down"
+                  >
+                    ▼
+                  </button>
+                </div>
+                <div className="flex flex-col">
+                  <button
+                    onClick={onOutdent}
+                    disabled={!task.is_indented}
+                    className={`px-1 leading-none text-xs ${
+                      task.is_indented ? 'text-gray-400 hover:text-gray-700' : 'text-gray-200 cursor-default'
+                    }`}
+                    title="Outdent (move left)"
+                  >
+                    ◀
+                  </button>
+                  <button
+                    onClick={onIndent}
+                    disabled={task.is_indented}
+                    className={`px-1 leading-none text-xs ${
+                      !task.is_indented ? 'text-gray-400 hover:text-gray-700' : 'text-gray-200 cursor-default'
+                    }`}
+                    title="Indent (move right)"
+                  >
+                    ▶
+                  </button>
+                </div>
               </div>
             )}
             <input
@@ -275,125 +284,100 @@ export default function Task({
                 )}
               </div>
 
-              {/* Hold Icon Button */}
-              <div 
-                ref={holdWrapperRef}
-                className="relative"
-                onMouseEnter={handleHoldMouseEnter}
-                onMouseLeave={handleHoldMouseLeave}
+              {/* Hold dot (status toggle, no hover tooltip) */}
+              <button
+                onClick={toggleOnHold}
+                className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors flex-shrink-0 bg-white border ${
+                  localTaskStatus === 'on-hold'
+                    ? 'border-gray-500'
+                    : 'border-gray-300 hover:border-gray-400'
+                }`}
+                title="Toggle on-hold"
               >
-                <button
-                  onClick={toggleOnHold}
-                  className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors flex-shrink-0 bg-white border ${
-                    localTaskStatus === 'on-hold'
-                      ? 'border-gray-500'
-                      : 'border-gray-300 hover:border-gray-400'
+                <span
+                  className={`block w-4 h-4 rounded-full ${
+                    localTaskStatus === 'on-hold' ? 'bg-red-600' : 'bg-red-300'
                   }`}
-                  title="Hold status"
-                >
-                  <span
-                    className={`block w-4 h-4 rounded-full ${
-                      localTaskStatus === 'on-hold' ? 'bg-red-600' : 'bg-red-300'
-                    }`}
-                  />
-                </button>
-                {showHoldTooltip && localTaskStatus === 'on-hold' && (
-                  <div
-                    ref={holdTooltipRef}
-                    className="absolute right-0 top-full mt-1 bg-white border border-gray-300 rounded shadow-lg p-2 w-48 z-50 text-xs"
-                    onMouseEnter={handleHoldMouseEnter}
-                    onMouseLeave={handleHoldMouseLeave}
-                  >
-                    <p className="font-medium text-gray-700 mb-1">Hold Reason:</p>
-                    {showHoldEditor ? (
-                      <div className="space-y-1">
-                        <textarea
-                          value={holdReason}
-                          onChange={(e) => setHoldReason(e.target.value)}
-                          className="w-full px-2 py-1 text-xs border border-gray-300 rounded resize-none"
-                          rows="2"
-                          autoFocus
-                        />
-                        <button
-                          onClick={saveHoldReason}
-                          className="w-full px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
-                        >
-                          Save
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="space-y-1">
-                        <p className="text-gray-600 break-words">{holdReason || 'No reason provided'}</p>
-                        <button
-                          onClick={() => setShowHoldEditor(true)}
-                          className="text-blue-600 text-xs hover:text-blue-700 font-medium"
-                        >
-                          Edit
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+                />
+              </button>
 
-              {/* Carry Forward Icon Button */}
-              <div 
-                ref={carryForwardWrapperRef}
-                className="relative"
-                onMouseEnter={handleCarryForwardMouseEnter}
-                onMouseLeave={handleCarryForwardMouseLeave}
+              {/* Carry-forward dot (status toggle, no hover tooltip) */}
+              <button
+                onClick={toggleCarryForward}
+                className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors flex-shrink-0 bg-white border ${
+                  localCarryForwardWeeks > 0
+                    ? 'border-gray-500'
+                    : 'border-gray-300 hover:border-gray-400'
+                }`}
+                title="Toggle carry-forward"
               >
-                <button
-                  onClick={toggleCarryForward}
-                  className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors flex-shrink-0 bg-white border ${
-                    localCarryForwardWeeks > 0
-                      ? 'border-gray-500'
-                      : 'border-gray-300 hover:border-gray-400'
+                <span
+                  className={`block w-4 h-4 rounded-full ${
+                    localCarryForwardWeeks > 0 ? 'bg-purple-600' : 'bg-purple-300'
                   }`}
-                  title="Carry forward status"
+                />
+              </button>
+
+              {/* Comment button + popover (same size as the dots) */}
+              <div ref={commentWrapperRef} className="relative flex-shrink-0">
+                <button
+                  onClick={() => setShowComments((v) => !v)}
+                  className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors bg-white border ${
+                    showComments || localCommentCount > 0
+                      ? 'border-gray-500 text-gray-700'
+                      : 'border-gray-300 hover:border-gray-400 text-gray-400'
+                  }`}
+                  title="Comments"
                 >
-                  <span
-                    className={`block w-4 h-4 rounded-full ${
-                      localCarryForwardWeeks > 0 ? 'bg-purple-600' : 'bg-purple-300'
-                    }`}
-                  />
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                  </svg>
+                  {localCommentCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-[9px] leading-none rounded-full min-w-[14px] h-[14px] flex items-center justify-center px-1">
+                      {localCommentCount}
+                    </span>
+                  )}
                 </button>
-                {showCarryForwardTooltip && localCarryForwardWeeks > 0 && (
-                  <div
-                    ref={carryForwardTooltipRef}
-                    className="absolute right-0 top-full mt-1 bg-white border border-gray-300 rounded shadow-lg p-2 w-48 z-50 text-xs"
-                    onMouseEnter={handleCarryForwardMouseEnter}
-                    onMouseLeave={handleCarryForwardMouseLeave}
-                  >
-                    <p className="font-medium text-gray-700 mb-1">Carry Forward:</p>
-                    {showCarryForwardEditor ? (
-                      <div className="space-y-1">
-                        <input
-                          type="number"
-                          min="1"
-                          value={carryForwardWeeks}
-                          onChange={(e) => setCarryForwardWeeks(Math.max(1, parseInt(e.target.value) || 1))}
-                          className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                          autoFocus
-                        />
-                        <button
-                          onClick={saveCarryForwardWeeks}
-                          className="w-full px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
-                        >
-                          Save
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="space-y-1">
-                        <p className="text-gray-600">{carryForwardWeeks} week{carryForwardWeeks !== 1 ? 's' : ''}</p>
-                        <button
-                          onClick={() => setShowCarryForwardEditor(true)}
-                          className="text-blue-600 text-xs hover:text-blue-700 font-medium"
-                        >
-                          Edit
-                        </button>
-                      </div>
-                    )}
+
+                {showComments && (
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-xl z-50 flex flex-col">
+                    <div className="px-3 py-2 border-b border-gray-100">
+                      <p className="text-xs font-semibold text-gray-700">Comments</p>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto p-3 space-y-2">
+                      {comments.length === 0 && (
+                        <p className="text-xs text-gray-400">No comments yet.</p>
+                      )}
+                      {comments.map((c) => (
+                        <div key={c.id} className="group flex items-start gap-2">
+                          <p className="text-xs text-gray-700 break-words flex-1 whitespace-pre-wrap">{c.body}</p>
+                          <button
+                            onClick={() => handleDeleteComment(c.id)}
+                            className="text-gray-300 hover:text-red-500 text-xs leading-none opacity-0 group-hover:opacity-100 flex-shrink-0"
+                            title="Delete comment"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="p-2 border-t border-gray-100 flex gap-1.5">
+                      <input
+                        type="text"
+                        value={newComment}
+                        onChange={(e) => setNewComment(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleAddComment() }}
+                        placeholder="Add a comment…"
+                        className="flex-1 min-w-0 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <button
+                        onClick={handleAddComment}
+                        disabled={!newComment.trim()}
+                        className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50 flex-shrink-0"
+                      >
+                        Add
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
