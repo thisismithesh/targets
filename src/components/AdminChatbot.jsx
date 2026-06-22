@@ -137,7 +137,7 @@ export default function AdminChatbot({ teamMembers, weeks, starCounts }) {
               <select
                 value={scope}
                 onChange={(e) => setScope(Number(e.target.value))}
-                className="mt-1.5 w-36 text-xs text-gray-600 bg-white border border-gray-300 rounded-md pl-2.5 pr-7 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                className="mt-1.5 w-auto text-xs text-gray-600 bg-white border border-gray-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
                 title="Choose how much data to include"
               >
                 {scopeOptions.map((o) => (
