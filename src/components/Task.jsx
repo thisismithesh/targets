@@ -8,12 +8,10 @@ export default function Task({
   onTaskUpdate,
   onDeleteTask,
   isSubtask = false,
-  draggable = false,
-  onDragStart,
-  onDragOver,
-  onDrop,
-  onDragEnd,
-  isDragging = false,
+  onMoveUp,
+  onMoveDown,
+  canMoveUp = false,
+  canMoveDown = false,
 }) {
   const [showSubtasks, setShowSubtasks] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
@@ -163,26 +161,37 @@ export default function Task({
   return (
     <>
       <div 
-        onDragOver={draggable ? onDragOver : undefined}
-        onDrop={draggable ? onDrop : undefined}
         className={`task-card ${
           localTaskStatus === 'on-hold' ? 'on-hold' : 
           localTaskStatus === 'carry-forward' || localCarryForwardWeeks > 0 ? 'carry-forward' :
           localTaskStatus === 'completed' ? 'completed' : ''
-        } ${isSubtask ? 'ml-8 border-l-4' : ''} ${isDragging ? 'opacity-40' : ''} transition-shadow`}
+        } ${isSubtask ? 'ml-8 border-l-4' : ''} transition-shadow`}
       >
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            {draggable && !isEditing && (
-              <span
-                draggable
-                onDragStart={onDragStart}
-                onDragEnd={onDragEnd}
-                className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 select-none flex-shrink-0 leading-none"
-                title="Drag to reorder"
-              >
-                ⠿
-              </span>
+            {(onMoveUp || onMoveDown) && !isEditing && (
+              <div className="flex flex-col flex-shrink-0 -my-1">
+                <button
+                  onClick={onMoveUp}
+                  disabled={!canMoveUp}
+                  className={`px-1.5 leading-none text-xs ${
+                    canMoveUp ? 'text-gray-400 hover:text-gray-700' : 'text-gray-200 cursor-default'
+                  }`}
+                  title="Move up"
+                >
+                  ▲
+                </button>
+                <button
+                  onClick={onMoveDown}
+                  disabled={!canMoveDown}
+                  className={`px-1.5 leading-none text-xs ${
+                    canMoveDown ? 'text-gray-400 hover:text-gray-700' : 'text-gray-200 cursor-default'
+                  }`}
+                  title="Move down"
+                >
+                  ▼
+                </button>
+              </div>
             )}
             <input
               type="checkbox"
@@ -254,7 +263,7 @@ export default function Task({
 
           {!isEditing && (
             <div className="flex items-center gap-1.5 flex-shrink-0">
-              <div className="text-xs text-gray-600 whitespace-nowrap">
+              <div className="text-xs text-gray-600 whitespace-nowrap mr-3">
                 {task.deadline && (
                   <span>{formatDate(task.deadline)}</span>
                 )}
