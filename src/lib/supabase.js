@@ -258,3 +258,78 @@ export async function getStarCounts() {
   }
   return counts
 }
+
+// ── Task comments ───────────────────────────────────────────────────
+export async function getTaskComments(taskId) {
+  const { data, error } = await supabase
+    .from('task_comments')
+    .select('*')
+    .eq('task_id', taskId)
+    .order('created_at', { ascending: true })
+
+  if (error) throw error
+  return data || []
+}
+
+export async function addTaskComment(taskId, body) {
+  const { data, error } = await supabase
+    .from('task_comments')
+    .insert([{ task_id: taskId, body }])
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function deleteTaskComment(commentId) {
+  const { error } = await supabase
+    .from('task_comments')
+    .delete()
+    .eq('id', commentId)
+
+  if (error) throw error
+}
+
+// Comment counts for a set of task ids → { [task_id]: count }
+export async function getCommentCounts(taskIds) {
+  if (!taskIds || taskIds.length === 0) return {}
+  const { data, error } = await supabase
+    .from('task_comments')
+    .select('task_id')
+    .in('task_id', taskIds)
+
+  if (error) throw error
+  const counts = {}
+  for (const row of data || []) {
+    counts[row.task_id] = (counts[row.task_id] || 0) + 1
+  }
+  return counts
+}
+
+// ── Heading order ───────────────────────────────────────────────────
+export async function getHeadingOrders(teamMemberId, weekId) {
+  const { data, error } = await supabase
+    .from('heading_orders')
+    .select('*')
+    .eq('team_member_id', teamMemberId)
+    .eq('week_id', weekId)
+
+  if (error) throw error
+  return data || []
+}
+
+// Persist the full ordering for a member+week's headings.
+export async function saveHeadingOrder(teamMemberId, weekId, orderedHeadings) {
+  const rows = orderedHeadings.map((heading, i) => ({
+    team_member_id: teamMemberId,
+    week_id: weekId,
+    heading,
+    position: i,
+  }))
+  const { error } = await supabase
+    .from('heading_orders')
+    .upsert(rows, { onConflict: 'team_member_id,week_id,heading' })
+
+  if (error) throw error
+}
