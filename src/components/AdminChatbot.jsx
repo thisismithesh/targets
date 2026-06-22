@@ -130,10 +130,10 @@ export default function AdminChatbot({ teamMembers, weeks, starCounts }) {
       {/* Chat panel */}
       {isOpen && (
         <div className="chat-pop relative mb-3 w-[420px] max-w-[calc(100vw-3rem)] max-h-[calc(100vh-7rem)] bg-white rounded-2xl border border-gray-200 shadow-2xl flex flex-col overflow-hidden">
-          {/* Close button — top-right corner, equal spacing from top and right */}
+          {/* Close button — top-right corner */}
           <button
             onClick={() => setIsOpen(false)}
-            className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 text-lg leading-none"
+            className="absolute top-3 right-5 text-gray-400 hover:text-gray-600 text-lg leading-none"
             title="Close"
           >
             &times;
@@ -142,13 +142,13 @@ export default function AdminChatbot({ teamMembers, weeks, starCounts }) {
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <div>
-              <h2 className="text-lg font-bold text-gray-900 leading-tight">Ask about the data</h2>
+              <h2 className="text-2xl font-bold text-gray-900 leading-tight">Ask anything</h2>
               <div className="mt-1.5 flex items-center gap-3">
                 <div className="relative inline-block">
                   <select
                     value={scope}
                     onChange={(e) => setScope(Number(e.target.value))}
-                    className="appearance-none w-auto text-xs text-gray-600 bg-white border border-gray-300 rounded-md pl-2.5 pr-7 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                    className="appearance-none w-auto text-xs text-gray-600 bg-white border border-gray-300 rounded-md pl-2 pr-7 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
                     title="Choose how much data to include"
                   >
                     {scopeOptions.map((o) => (
@@ -239,9 +239,14 @@ export default function AdminChatbot({ teamMembers, weeks, starCounts }) {
         className="w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg flex items-center justify-center transition-transform hover:scale-105"
         title={isOpen ? 'Close chat' : 'Ask about the data'}
       >
-        <span className="leading-none" style={{ fontSize: isOpen ? '26px' : '24px', lineHeight: 1 }}>
-          {isOpen ? '\u00D7' : '\uD83D\uDCAC'}
-        </span>
+        {isOpen ? (
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <line x1="6" y1="6" x2="18" y2="18" />
+            <line x1="18" y1="6" x2="6" y2="18" />
+          </svg>
+        ) : (
+          <span style={{ fontSize: '24px', lineHeight: 1 }}>{'\uD83D\uDCAC'}</span>
+        )}
       </button>
     </div>
   )
