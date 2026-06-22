@@ -31,9 +31,6 @@ export default function TeamMemberDetail() {
     estimated_hours: '',
   })
 
-  // Drag-and-drop reorder state
-  const [draggedId, setDraggedId] = useState(null)
-  const [dragHeading, setDragHeading] = useState(null)
 
   useEffect(() => {
     loadData()
@@ -167,42 +164,23 @@ export default function TeamMemberDetail() {
   const nextPosition = () =>
     tasks.reduce((max, t) => Math.max(max, t.position ?? 0), -1) + 1
 
-  // Live reorder while dragging: move the dragged task above/below the task
-  // it is hovering over, based on cursor position relative to the row midpoint.
-  const handleDragOverTask = (heading, overId, e) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-    if (!draggedId || draggedId === overId) return
+  // Move a task one slot up or down within its heading group, then persist.
+  // `orderedGroup` is the currently displayed (sorted) list for the heading.
+  const moveTask = async (orderedGroup, index, direction) => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1
+    if (targetIndex < 0 || targetIndex >= orderedGroup.length) return
 
-    const group = tasks.filter((t) => t.heading === heading)
-    const fromIndex = group.findIndex((t) => t.id === draggedId)
-    const overIndex = group.findIndex((t) => t.id === overId)
-    if (fromIndex === -1 || overIndex === -1) return
-
-    // Determine whether to drop before or after the hovered row
-    const rect = e.currentTarget.getBoundingClientRect()
-    const isBelow = e.clientY > rect.top + rect.height / 2
-    let targetIndex = isBelow ? overIndex + 1 : overIndex
-    // Adjust for the removal of the dragged item that sits before the target
-    if (fromIndex < targetIndex) targetIndex -= 1
-    if (targetIndex === fromIndex) return
-
-    const reordered = [...group]
-    const [moved] = reordered.splice(fromIndex, 1)
+    const reordered = [...orderedGroup]
+    const [moved] = reordered.splice(index, 1)
     reordered.splice(targetIndex, 0, moved)
 
-    // Apply new positions to local state immediately for a smooth reflow
+    // Apply new sequential positions to local state immediately
     const byId = new Map(reordered.map((t, i) => [t.id, { ...t, position: i }]))
     setTasks((prev) => prev.map((t) => byId.get(t.id) || t))
-  }
 
-  // Persist the final order for a heading group once dragging ends
-  const persistOrder = async (heading) => {
-    const group = tasks
-      .filter((t) => t.heading === heading)
-      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+    // Persist new positions
     try {
-      await Promise.all(group.map((t, i) => updateTask(t.id, { position: i })))
+      await Promise.all(reordered.map((t, i) => updateTask(t.id, { position: i })))
     } catch (err) {
       console.error('Error saving order:', err)
       handleTaskUpdate()
@@ -381,32 +359,17 @@ export default function TeamMemberDetail() {
                     </button>
                   </div>
                   <div className="space-y-2">
-                    {headingTasks.map((task) => (
+                    {headingTasks.map((task, index) => (
                       <Task
                         key={task.id}
                         task={task}
                         subtasks={subtaskMap[task.id] || []}
                         onTaskUpdate={handleTaskUpdate}
                         onDeleteTask={handleDeleteTask}
-                        draggable
-                        isDragging={draggedId === task.id}
-                        onDragStart={(e) => {
-                          setDraggedId(task.id)
-                          setDragHeading(heading)
-                          e.dataTransfer.effectAllowed = 'move'
-                        }}
-                        onDragOver={(e) => handleDragOverTask(heading, task.id, e)}
-                        onDrop={(e) => {
-                          e.preventDefault()
-                          persistOrder(heading)
-                          setDraggedId(null)
-                          setDragHeading(null)
-                        }}
-                        onDragEnd={() => {
-                          if (dragHeading) persistOrder(dragHeading)
-                          setDraggedId(null)
-                          setDragHeading(null)
-                        }}
+                        canMoveUp={index > 0}
+                        canMoveDown={index < headingTasks.length - 1}
+                        onMoveUp={() => moveTask(headingTasks, index, 'up')}
+                        onMoveDown={() => moveTask(headingTasks, index, 'down')}
                       />
                     ))}
                     {inlineHeading === heading && (
