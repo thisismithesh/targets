@@ -21,12 +21,12 @@ body {
   @apply py-2 border-b border-gray-100 transition-colors;
 }
 
-/* Status is now conveyed via the task name text color (see Task.jsx),
-   so the boxed backgrounds and left borders are intentionally removed. */
+/* Status is conveyed via the task name text color (see Task.jsx).
+   Keep the bottom divider on every row; only ensure no boxed bg. */
 .task-card.on-hold,
 .task-card.carry-forward,
 .task-card.completed {
-  @apply bg-transparent border-0;
+  @apply bg-transparent;
 }
 
 .badge {
