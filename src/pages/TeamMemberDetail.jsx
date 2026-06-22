@@ -493,7 +493,7 @@ export default function TeamMemberDetail() {
                           ▼
                         </button>
                       </div>
-                      <h2 className="text-sm font-semibold text-gray-700 tracking-wide">
+                      <h2 className="text-base font-bold text-gray-900 tracking-wide">
                         {heading}
                       </h2>
                     </div>
