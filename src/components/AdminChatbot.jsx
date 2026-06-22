@@ -129,7 +129,7 @@ export default function AdminChatbot({ teamMembers, weeks, starCounts }) {
     <div className="fixed bottom-6 right-6 z-[90] flex flex-col items-end">
       {/* Chat panel */}
       {isOpen && (
-        <div className="chat-pop mb-3 w-[380px] max-w-[calc(100vw-3rem)] bg-white rounded-2xl border border-gray-200 shadow-2xl flex flex-col overflow-hidden">
+        <div className="chat-pop mb-3 w-[420px] max-w-[calc(100vw-3rem)] max-h-[calc(100vh-7rem)] bg-white rounded-2xl border border-gray-200 shadow-2xl flex flex-col overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <div>
@@ -137,7 +137,7 @@ export default function AdminChatbot({ teamMembers, weeks, starCounts }) {
               <select
                 value={scope}
                 onChange={(e) => setScope(Number(e.target.value))}
-                className="mt-0.5 text-xs text-gray-500 bg-transparent border-none p-0 pr-4 focus:outline-none focus:ring-0 cursor-pointer"
+                className="mt-1 w-36 text-xs text-gray-600 bg-white border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
                 title="Choose how much data to include"
               >
                 {scopeOptions.map((o) => (
@@ -168,7 +168,7 @@ export default function AdminChatbot({ teamMembers, weeks, starCounts }) {
           {/* Messages */}
           <div
             ref={scrollRef}
-            className="h-80 overflow-y-auto bg-gray-50 p-3 space-y-3"
+            className="flex-1 min-h-[440px] overflow-y-auto bg-gray-50 p-4 space-y-3"
           >
             {messages.length === 0 && (
               <div className="text-sm text-gray-400 space-y-1">
