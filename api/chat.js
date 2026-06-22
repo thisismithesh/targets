@@ -22,7 +22,7 @@ export default async function handler(req, res) {
 
     // Basic guardrails: cap how much we accept, to bound token cost.
     const safeQuestion = question.slice(0, 2000)
-    const safeContext = typeof context === 'string' ? context.slice(0, 60000) : ''
+    const safeContext = typeof context === 'string' ? context.slice(0, 120000) : ''
 
     // Sanitize incoming conversation history. Keep only the last 10 turns,
     // only valid roles, and cap each message's length.
@@ -39,11 +39,16 @@ export default async function handler(req, res) {
       : []
 
     const systemPrompt =
-      "You are a helpful analytics assistant inside a weekly task-tracking admin tool. " +
+      "You are a careful, precise analytics assistant inside a weekly task-tracking admin tool. " +
       "You answer questions about the team's tasks, members, deadlines, estimated hours, " +
-      "completion status, and clean-sweep stars, using ONLY the data provided below. " +
-      "If the answer is not in the data, say so plainly rather than guessing. " +
-      "Be concise and direct. When asked for counts or totals, compute carefully from the data. " +
+      "completion status, and clean-sweep stars, using ONLY the data provided below.\n\n" +
+      "ACCURACY RULES (follow strictly):\n" +
+      "1. When counting or summing, go through the relevant items ONE BY ONE before stating a total. Do not estimate.\n" +
+      "2. Double-check every number against the data before writing it. Never state a figure you have not verified against the listed items.\n" +
+      "3. If you are about to rank or compare people by a number, list each person's number first, then state the ranking. Make sure the ranking matches the numbers.\n" +
+      "4. Do NOT correct yourself mid-answer. Work out the correct figures first, then give one clean, final answer.\n" +
+      "5. If the answer is not in the data, say so plainly rather than guessing.\n" +
+      "6. Be concise and direct. You may use **bold** for emphasis on key names or numbers.\n\n" +
       "Earlier messages in this conversation are provided for context so you can answer follow-up questions.\n\n" +
       "=== CURRENT DATA ===\n" + safeContext
 
@@ -58,7 +63,7 @@ export default async function handler(req, res) {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+        model: 'claude-sonnet-4-6',
         max_tokens: 1024,
         system: systemPrompt,
         messages,
