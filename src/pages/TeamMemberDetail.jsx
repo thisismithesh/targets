@@ -148,7 +148,6 @@ export default function TeamMemberDetail() {
   }
 
   const handleDeleteTask = async (taskId) => {
-    if (!window.confirm('Delete this task?')) return
     // Optimistically remove from local state for an immediate, clean update
     setTasks((prev) => prev.filter((t) => t.id !== taskId))
     setSubtaskMap((prev) => {
@@ -175,7 +174,6 @@ export default function TeamMemberDetail() {
     if (fromId === toId) return
 
     const group = tasks.filter((t) => t.heading === heading)
-    const others = tasks.filter((t) => t.heading !== heading)
     const fromIndex = group.findIndex((t) => t.id === fromId)
     const toIndex = group.findIndex((t) => t.id === toId)
     if (fromIndex === -1 || toIndex === -1) return
@@ -200,11 +198,19 @@ export default function TeamMemberDetail() {
     }
   }
 
-  // Group tasks by heading
+  // Group tasks by heading, ordered within each group by position then created_at
   const tasksByHeading = {}
   tasks.forEach((task) => {
     if (!tasksByHeading[task.heading]) tasksByHeading[task.heading] = []
     tasksByHeading[task.heading].push(task)
+  })
+  Object.keys(tasksByHeading).forEach((heading) => {
+    tasksByHeading[heading].sort((a, b) => {
+      const pa = a.position ?? 0
+      const pb = b.position ?? 0
+      if (pa !== pb) return pa - pb
+      return new Date(a.created_at) - new Date(b.created_at)
+    })
   })
 
   const completedCount = tasks.filter((t) => t.status === 'completed').length
