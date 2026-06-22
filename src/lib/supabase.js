@@ -143,3 +143,25 @@ export async function getTeamMemberById(memberId) {
   if (error) throw error
   return data
 }
+
+// Helper function to update a team member
+export async function updateTeamMember(memberId, updates) {
+  const { data, error } = await supabase
+    .from('team_members')
+    .update(updates)
+    .eq('id', memberId)
+    .select()
+
+  if (error) throw error
+  return data?.[0]
+}
+
+// Helper function to delete a team member
+export async function deleteTeamMember(memberId) {
+  const { error } = await supabase
+    .from('team_members')
+    .delete()
+    .eq('id', memberId)
+
+  if (error) throw error
+}
