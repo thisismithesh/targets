@@ -11,6 +11,7 @@ import {
 } from '../lib/supabase'
 import { getWeekLabelShort } from '../lib/utils'
 import Stars from '../components/Stars'
+import AdminChatbot from '../components/AdminChatbot'
 
 export default function AdminPanel() {
   const [teamMembers, setTeamMembers] = useState([])
@@ -322,6 +323,14 @@ export default function AdminPanel() {
             )}
           </div>
         </div>
+      </div>
+
+      <div className="mt-8">
+        <AdminChatbot
+          teamMembers={teamMembers}
+          weeks={weeks}
+          starCounts={starCounts}
+        />
       </div>
     </div>
   )
