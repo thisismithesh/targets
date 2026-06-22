@@ -4,8 +4,6 @@ import { supabase, getSubtasks, getTeamMemberById, getWeekById, createTask, dele
 import Task from '../components/Task'
 import { getWeekLabelShort } from '../lib/utils'
 
-const DEFAULT_HEADINGS = ['General', 'Development', 'Design', 'Research', 'Meetings', 'Other']
-
 export default function TeamMemberDetail() {
   const { memberId, weekId } = useParams()
   const [teamMember, setTeamMember] = useState(null)
@@ -25,7 +23,14 @@ export default function TeamMemberDetail() {
     estimated_hours: '',
   })
   const [addMessage, setAddMessage] = useState('')
-  const [expandedHeading, setExpandedHeading] = useState(null)
+
+  // Inline add-task state (used by the per-heading "+ Add" buttons)
+  const [inlineHeading, setInlineHeading] = useState(null)
+  const [inlineTask, setInlineTask] = useState({
+    task_name: '',
+    deadline: '',
+    estimated_hours: '',
+  })
 
   useEffect(() => {
     loadData()
@@ -86,12 +91,34 @@ export default function TeamMemberDetail() {
         status: 'pending',
         position: tasks.length,
       })
-      setNewTask({ task_name: '', heading: expandedHeading || 'General', deadline: '', estimated_hours: '' })
+      setNewTask({ task_name: '', heading: 'General', deadline: '', estimated_hours: '' })
       setAddMessage('')
+      setShowAddForm(false)
       handleTaskUpdate()
     } catch (err) {
       setAddMessage('Error adding task')
       console.error(err)
+    }
+  }
+
+  const handleAddInlineTask = async (heading) => {
+    if (!inlineTask.task_name) return
+    try {
+      await createTask({
+        team_member_id: memberId,
+        week_id: weekId,
+        task_name: inlineTask.task_name,
+        heading: heading || 'General',
+        deadline: inlineTask.deadline || null,
+        estimated_hours: inlineTask.estimated_hours ? parseFloat(inlineTask.estimated_hours) : null,
+        status: 'pending',
+        position: tasks.length,
+      })
+      setInlineTask({ task_name: '', deadline: '', estimated_hours: '' })
+      setInlineHeading(null)
+      handleTaskUpdate()
+    } catch (err) {
+      console.error('Error adding task:', err)
     }
   }
 
@@ -104,15 +131,6 @@ export default function TeamMemberDetail() {
       console.error('Error deleting task:', err)
     }
   }
-
-  // Build the list of available Project/Category options for this page:
-  // the default headings plus any custom headings already used by tasks here.
-  const categoryOptions = Array.from(
-    new Set([
-      ...DEFAULT_HEADINGS,
-      ...tasks.map((t) => t.heading).filter(Boolean),
-    ])
-  )
 
   // Group tasks by heading
   const tasksByHeading = {}
@@ -182,21 +200,17 @@ export default function TeamMemberDetail() {
                     <label className="block text-xs font-medium text-gray-700 mb-1">Project/Category</label>
                     <input
                       type="text"
-                      list="category-options"
                       value={newTask.heading}
                       onChange={(e) => setNewTask({ ...newTask, heading: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="Select or type a project/category"
+                      placeholder="e.g., General"
                     />
-                    <datalist id="category-options">
-                      {categoryOptions.map((h) => <option key={h} value={h} />)}
-                    </datalist>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Est. Hours</label>
                     <input
                       type="number"
-                      step="0.5"
+                      step="any"
                       min="0"
                       value={newTask.estimated_hours}
                       onChange={(e) => setNewTask({ ...newTask, estimated_hours: e.target.value })}
@@ -272,9 +286,8 @@ export default function TeamMemberDetail() {
                     </h2>
                     <button
                       onClick={() => {
-                        setShowAddForm(true)
-                        setExpandedHeading(heading)
-                        setNewTask({ ...newTask, heading })
+                        setInlineHeading(heading)
+                        setInlineTask({ task_name: '', deadline: '', estimated_hours: '' })
                       }}
                       className="text-xs text-blue-600 hover:text-blue-700 font-medium"
                       title={`Add task to ${heading}`}
@@ -292,6 +305,49 @@ export default function TeamMemberDetail() {
                         onDeleteTask={handleDeleteTask}
                       />
                     ))}
+                    {inlineHeading === heading && (
+                      <div className="flex gap-2 items-center bg-blue-50 border border-blue-200 rounded-md p-2">
+                        <input
+                          type="text"
+                          value={inlineTask.task_name}
+                          onChange={(e) => setInlineTask({ ...inlineTask, task_name: e.target.value })}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleAddInlineTask(heading)
+                            if (e.key === 'Escape') setInlineHeading(null)
+                          }}
+                          className="flex-[7] min-w-0 px-2 py-1 border border-gray-300 rounded text-sm"
+                          placeholder="Task name"
+                          autoFocus
+                        />
+                        <input
+                          type="date"
+                          value={inlineTask.deadline}
+                          onChange={(e) => setInlineTask({ ...inlineTask, deadline: e.target.value })}
+                          className="flex-[1.5] min-w-0 px-1 py-1 border border-gray-300 rounded text-xs"
+                        />
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          value={inlineTask.estimated_hours}
+                          onChange={(e) => setInlineTask({ ...inlineTask, estimated_hours: e.target.value })}
+                          placeholder="h"
+                          className="flex-[1] min-w-0 px-1 py-1 border border-gray-300 rounded text-xs"
+                        />
+                        <button
+                          onClick={() => handleAddInlineTask(heading)}
+                          className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 flex-shrink-0"
+                        >
+                          ✓
+                        </button>
+                        <button
+                          onClick={() => setInlineHeading(null)}
+                          className="px-2 py-1 bg-gray-300 text-gray-700 text-xs rounded hover:bg-gray-400 flex-shrink-0"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
