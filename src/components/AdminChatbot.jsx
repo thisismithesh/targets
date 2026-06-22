@@ -18,8 +18,13 @@ export default function AdminChatbot({ teamMembers, weeks, starCounts }) {
     }
   }, [messages, isLoading])
 
-  // The 4 most recent weeks (weeks arrive newest-first).
-  const recentWeeks = (weeks || []).slice(0, 4)
+  // The 4 most recent weeks up to today (weeks arrive newest-first).
+  // Exclude future weeks (which may exist in the DB but have no tasks yet).
+  const todayStr = new Date().toISOString().split('T')[0]
+  const pastOrCurrentWeeks = (weeks || []).filter(
+    (w) => w.week_start_date <= todayStr
+  )
+  const recentWeeks = pastOrCurrentWeeks.slice(0, 4)
   const scopeLabel =
     recentWeeks.length > 0
       ? `Last ${recentWeeks.length} week${recentWeeks.length > 1 ? 's' : ''}`
