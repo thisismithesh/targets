@@ -33,7 +33,9 @@ export default function Task({
   const [newComment, setNewComment] = useState('')
   const [commentsLoaded, setCommentsLoaded] = useState(false)
   const [localCommentCount, setLocalCommentCount] = useState(commentCount)
+  const [commentsAbove, setCommentsAbove] = useState(false)
   const commentWrapperRef = useRef(null)
+  const commentButtonRef = useRef(null)
 
   const statusColor = getStatusColor(localTaskStatus, localCarryForwardWeeks)
 
@@ -64,6 +66,32 @@ export default function Task({
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showComments])
+
+  const toggleComments = () => {
+    if (!showComments) {
+      // Decide whether to open upward: if the button is in the lower part of
+      // the viewport, the popover would overflow below — flip it above.
+      const btn = commentButtonRef.current
+      if (btn) {
+        const rect = btn.getBoundingClientRect()
+        const spaceBelow = window.innerHeight - rect.bottom
+        setCommentsAbove(spaceBelow < 320) // popover needs ~300px
+      }
+    }
+    setShowComments((v) => !v)
+  }
+
+  const formatCommentTime = (ts) => {
+    if (!ts) return ''
+    const d = new Date(ts)
+    if (isNaN(d.getTime())) return ''
+    return d.toLocaleString(undefined, {
+      day: 'numeric',
+      month: 'short',
+      hour: 'numeric',
+      minute: '2-digit',
+    })
+  }
 
   const handleAddComment = async () => {
     const body = newComment.trim()
@@ -157,51 +185,55 @@ export default function Task({
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             {(onMoveUp || onMoveDown) && !isEditing && (
-              <div className="flex items-center flex-shrink-0 -my-1">
-                <div className="flex flex-col">
-                  <button
-                    onClick={onMoveUp}
-                    disabled={!canMoveUp}
-                    className={`px-1 leading-none text-xs ${
-                      canMoveUp ? 'text-gray-400 hover:text-gray-700' : 'text-gray-200 cursor-default'
-                    }`}
-                    title="Move up"
-                  >
-                    ▲
-                  </button>
-                  <button
-                    onClick={onMoveDown}
-                    disabled={!canMoveDown}
-                    className={`px-1 leading-none text-xs ${
-                      canMoveDown ? 'text-gray-400 hover:text-gray-700' : 'text-gray-200 cursor-default'
-                    }`}
-                    title="Move down"
-                  >
-                    ▼
-                  </button>
-                </div>
-                <div className="flex flex-col">
-                  <button
-                    onClick={onOutdent}
-                    disabled={!task.is_indented}
-                    className={`px-1 leading-none text-xs ${
-                      task.is_indented ? 'text-gray-400 hover:text-gray-700' : 'text-gray-200 cursor-default'
-                    }`}
-                    title="Outdent (move left)"
-                  >
-                    ◀
-                  </button>
-                  <button
-                    onClick={onIndent}
-                    disabled={task.is_indented}
-                    className={`px-1 leading-none text-xs ${
-                      !task.is_indented ? 'text-gray-400 hover:text-gray-700' : 'text-gray-200 cursor-default'
-                    }`}
-                    title="Indent (move right)"
-                  >
-                    ▶
-                  </button>
-                </div>
+              <div className="grid grid-cols-3 grid-rows-3 flex-shrink-0 -my-1 w-[42px] h-[42px] place-items-center text-[10px] leading-none">
+                {/* row 1: up */}
+                <span />
+                <button
+                  onClick={onMoveUp}
+                  disabled={!canMoveUp}
+                  className={`w-full h-full flex items-center justify-center ${
+                    canMoveUp ? 'text-gray-400 hover:text-gray-700' : 'text-gray-200 cursor-default'
+                  }`}
+                  title="Move up"
+                >
+                  ▲
+                </button>
+                <span />
+                {/* row 2: left · center · right */}
+                <button
+                  onClick={onOutdent}
+                  disabled={!task.is_indented}
+                  className={`w-full h-full flex items-center justify-center ${
+                    task.is_indented ? 'text-gray-400 hover:text-gray-700' : 'text-gray-200 cursor-default'
+                  }`}
+                  title="Outdent (move left)"
+                >
+                  ◀
+                </button>
+                <span />
+                <button
+                  onClick={onIndent}
+                  disabled={task.is_indented}
+                  className={`w-full h-full flex items-center justify-center ${
+                    !task.is_indented ? 'text-gray-400 hover:text-gray-700' : 'text-gray-200 cursor-default'
+                  }`}
+                  title="Indent (move right)"
+                >
+                  ▶
+                </button>
+                {/* row 3: down */}
+                <span />
+                <button
+                  onClick={onMoveDown}
+                  disabled={!canMoveDown}
+                  className={`w-full h-full flex items-center justify-center ${
+                    canMoveDown ? 'text-gray-400 hover:text-gray-700' : 'text-gray-200 cursor-default'
+                  }`}
+                  title="Move down"
+                >
+                  ▼
+                </button>
+                <span />
               </div>
             )}
             <input
@@ -321,7 +353,8 @@ export default function Task({
               {/* Comment button + popover (same size as the dots) */}
               <div ref={commentWrapperRef} className="relative flex-shrink-0">
                 <button
-                  onClick={() => setShowComments((v) => !v)}
+                  ref={commentButtonRef}
+                  onClick={toggleComments}
                   className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors bg-white border ${
                     showComments || localCommentCount > 0
                       ? 'border-gray-500 text-gray-700'
@@ -340,17 +373,22 @@ export default function Task({
                 </button>
 
                 {showComments && (
-                  <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-xl z-50 flex flex-col">
+                  <div className={`absolute right-0 w-64 bg-white border border-gray-200 rounded-lg shadow-xl z-50 flex flex-col ${
+                    commentsAbove ? 'bottom-full mb-2' : 'top-full mt-2'
+                  }`}>
                     <div className="px-3 py-2 border-b border-gray-100">
                       <p className="text-xs font-semibold text-gray-700">Comments</p>
                     </div>
-                    <div className="max-h-48 overflow-y-auto p-3 space-y-2">
+                    <div className="max-h-48 overflow-y-auto p-3 space-y-3">
                       {comments.length === 0 && (
                         <p className="text-xs text-gray-400">No comments yet.</p>
                       )}
                       {comments.map((c) => (
                         <div key={c.id} className="group flex items-start gap-2">
-                          <p className="text-xs text-gray-700 break-words flex-1 whitespace-pre-wrap">{c.body}</p>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-gray-700 break-words whitespace-pre-wrap">{c.body}</p>
+                            <p className="text-[10px] text-gray-400 mt-0.5">{formatCommentTime(c.created_at)}</p>
+                          </div>
                           <button
                             onClick={() => handleDeleteComment(c.id)}
                             className="text-gray-300 hover:text-red-500 text-xs leading-none opacity-0 group-hover:opacity-100 flex-shrink-0"
