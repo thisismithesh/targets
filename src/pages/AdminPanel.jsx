@@ -325,13 +325,11 @@ export default function AdminPanel() {
         </div>
       </div>
 
-      <div className="mt-8">
-        <AdminChatbot
-          teamMembers={teamMembers}
-          weeks={weeks}
-          starCounts={starCounts}
-        />
-      </div>
+      <AdminChatbot
+        teamMembers={teamMembers}
+        weeks={weeks}
+        starCounts={starCounts}
+      />
     </div>
   )
 }
