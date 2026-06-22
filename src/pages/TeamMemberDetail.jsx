@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { supabase, getSubtasks, getTeamMemberById, getWeekById, createTask, updateTask, deleteTask } from '../lib/supabase'
+import { supabase, getSubtasks, getTeamMemberById, getWeekById, createTask, updateTask, deleteTask, recordCleanSweep, removeCleanSweep, getStarCount } from '../lib/supabase'
 import Task from '../components/Task'
+import CleanSweepPopup from '../components/CleanSweepPopup'
+import Stars from '../components/Stars'
 import { getWeekLabelShort } from '../lib/utils'
 
 export default function TeamMemberDetail() {
@@ -12,6 +14,19 @@ export default function TeamMemberDetail() {
   const [subtaskMap, setSubtaskMap] = useState({})
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
+
+  // Clean-sweep (star) detection
+  const [showSweep, setShowSweep] = useState(false)
+  const [wasSwept, setWasSwept] = useState(null) // null until first load establishes baseline
+  const [starCount, setStarCount] = useState(0)
+
+  const refreshStars = async () => {
+    try {
+      setStarCount(await getStarCount(memberId))
+    } catch (err) {
+      console.error('Error loading stars:', err)
+    }
+  }
 
   // Add task form state
   const [showAddForm, setShowAddForm] = useState(false)
@@ -71,6 +86,10 @@ export default function TeamMemberDetail() {
       const { list, map } = await fetchTasks()
       setTasks(list)
       setSubtaskMap(map)
+      // Establish the sweep baseline silently (no popup on initial load,
+      // so revisiting an already-completed week doesn't re-congratulate)
+      setWasSwept(computeSwept(list))
+      refreshStars()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data')
       console.error('Error loading data:', err)
@@ -79,12 +98,37 @@ export default function TeamMemberDetail() {
     }
   }
 
+  // A clean sweep = at least one task and every task completed.
+  const computeSwept = (list) =>
+    list.length > 0 && list.every((t) => t.status === 'completed')
+
   // Silent reload: refresh task data in the background without the loading spinner
   const handleTaskUpdate = async () => {
     try {
       const { list, map } = await fetchTasks()
       setTasks(list)
       setSubtaskMap(map)
+
+      const swept = computeSwept(list)
+      // Fire only on the transition into a swept state
+      if (swept && wasSwept === false) {
+        try {
+          await recordCleanSweep(memberId, weekId)
+          setShowSweep(true)
+          refreshStars()
+        } catch (err) {
+          console.error('Error recording clean sweep:', err)
+        }
+      } else if (!swept && wasSwept === true) {
+        // No longer a clean sweep — drop the star for this week
+        try {
+          await removeCleanSweep(memberId, weekId)
+          refreshStars()
+        } catch (err) {
+          console.error('Error removing clean sweep:', err)
+        }
+      }
+      setWasSwept(swept)
     } catch (err) {
       console.error('Error refreshing tasks:', err)
     }
@@ -219,6 +263,7 @@ export default function TeamMemberDetail() {
 
   return (
     <div>
+      {showSweep && <CleanSweepPopup onClose={() => setShowSweep(false)} />}
       <Link to="/" className="text-blue-600 hover:text-blue-700 mb-6 inline-block">
         ← Back to Dashboard
       </Link>
@@ -227,7 +272,10 @@ export default function TeamMemberDetail() {
         <>
           <div className="mb-6 flex items-start justify-between flex-wrap gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-1">{teamMember.name}</h1>
+              <h1 className="text-3xl font-bold text-gray-900 mb-1 flex items-center gap-2">
+                <span>{teamMember.name}</span>
+                <Stars count={starCount} />
+              </h1>
               <p className="text-gray-500 text-sm mb-1">{teamMember.team}</p>
               <p className="text-lg text-gray-600">{getWeekLabelShort(week.week_start_date)}</p>
             </div>
