@@ -18,19 +18,15 @@ body {
 
 /* Task Card Styles - Compact */
 .task-card {
-  @apply bg-white border border-gray-200 rounded-lg p-3 mb-2 transition-all hover:shadow-md;
+  @apply py-2 border-b border-gray-100 transition-colors;
 }
 
-.task-card.on-hold {
-  @apply border-l-4 border-l-red-500 bg-red-50;
-}
-
-.task-card.carry-forward {
-  @apply border-l-4 border-l-purple-500 bg-purple-50;
-}
-
+/* Status is now conveyed via the task name text color (see Task.jsx),
+   so the boxed backgrounds and left borders are intentionally removed. */
+.task-card.on-hold,
+.task-card.carry-forward,
 .task-card.completed {
-  @apply border-l-4 border-l-green-500 bg-green-50;
+  @apply bg-transparent border-0;
 }
 
 .badge {
