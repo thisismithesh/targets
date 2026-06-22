@@ -392,14 +392,22 @@ export default function Task({
                 )}
               </div>
 
-              {/* Indent toggle (> indents, < outdents) — x-button style */}
+              {/* Indent toggle (indent / outdent) — icon, x-button style */}
               {(onIndent || onOutdent) && (
                 <button
                   onClick={() => (task.is_indented ? onOutdent && onOutdent() : onIndent && onIndent())}
-                  className="px-2 text-xs text-gray-400 hover:text-gray-700 font-medium flex-shrink-0"
+                  className="pl-2 pr-0.5 text-gray-400 hover:text-gray-700 flex-shrink-0 flex items-center"
                   title={task.is_indented ? 'Outdent' : 'Indent'}
                 >
-                  {task.is_indented ? '<' : '>'}
+                  {task.is_indented ? (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="15 18 9 12 15 6" />
+                    </svg>
+                  ) : (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                  )}
                 </button>
               )}
 
