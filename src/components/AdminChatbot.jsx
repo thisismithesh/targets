@@ -22,6 +22,7 @@ export default function AdminChatbot({ teamMembers, weeks, starCounts }) {
   const [messages, setMessages] = useState([]) // { role: 'user'|'assistant', text }
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [scope, setScope] = useState(4) // number of recent weeks: 1, 4, or 12
   const scrollRef = useRef(null)
 
   useEffect(() => {
@@ -30,21 +31,23 @@ export default function AdminChatbot({ teamMembers, weeks, starCounts }) {
     }
   }, [messages, isLoading, isOpen])
 
-  // The 4 most recent weeks up to today (weeks arrive newest-first).
+  // Recent weeks up to today (weeks arrive newest-first).
   // Exclude future weeks (which may exist in the DB but have no tasks yet).
   const todayStr = new Date().toISOString().split('T')[0]
   const pastOrCurrentWeeks = (weeks || []).filter(
     (w) => w.week_start_date <= todayStr
   )
-  const recentWeeks = pastOrCurrentWeeks.slice(0, 4)
-  const scopeLabel =
-    recentWeeks.length > 0
-      ? `Last ${recentWeeks.length} week${recentWeeks.length > 1 ? 's' : ''}`
-      : 'No weeks'
+  const recentWeeks = pastOrCurrentWeeks.slice(0, scope)
 
-  // Gather a compact text snapshot of the last 4 weeks for the AI.
+  const scopeOptions = [
+    { value: 1, label: 'This week' },
+    { value: 4, label: 'Last 4 weeks' },
+    { value: 12, label: 'Last 12 weeks' },
+  ]
+
+  // Gather a compact text snapshot of the selected scope for the AI.
   const buildContext = async () => {
-    const lines = [`Scope: most recent ${recentWeeks.length} week(s).`, `Team members: ${teamMembers.length}`, '']
+    const lines = [`Scope: most recent ${recentWeeks.length} week(s) (up to today).`, `Team members: ${teamMembers.length}`, '']
 
     for (const w of recentWeeks) {
       const weekName = getWeekLabelShort(w.week_start_date)
@@ -131,7 +134,16 @@ export default function AdminChatbot({ teamMembers, weeks, starCounts }) {
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <div>
               <h2 className="text-base font-bold text-gray-900 leading-tight">Ask about the data</h2>
-              <p className="text-xs text-gray-400">{scopeLabel}</p>
+              <select
+                value={scope}
+                onChange={(e) => setScope(Number(e.target.value))}
+                className="mt-0.5 text-xs text-gray-500 bg-transparent border-none p-0 pr-4 focus:outline-none focus:ring-0 cursor-pointer"
+                title="Choose how much data to include"
+              >
+                {scopeOptions.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
             </div>
             <div className="flex items-center gap-3">
               {messages.length > 0 && (
