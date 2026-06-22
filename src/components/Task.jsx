@@ -258,12 +258,12 @@ export default function Task({
                   <h3 
                     onClick={() => setIsEditing(true)}
                     className={`text-sm font-medium cursor-pointer hover:underline truncate ${
-                      localTaskStatus === 'completed'
+                      localCarryForwardWeeks > 0
+                        ? `text-purple-600 ${localTaskStatus === 'completed' ? 'line-through' : ''}`
+                        : localTaskStatus === 'completed'
                         ? 'line-through text-gray-500'
                         : localTaskStatus === 'on-hold'
                         ? 'text-red-600'
-                        : localCarryForwardWeeks > 0
-                        ? 'text-purple-600'
                         : 'text-gray-900'
                     }`}
                   >
