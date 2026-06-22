@@ -33,6 +33,13 @@ export function getWeekLabel(weekStartDate) {
   return `${formatDate(date)} - ${formatDate(endDate)}`
 }
 
+export function getWeekLabelShort(weekStartDate) {
+  const date = parseISO(weekStartDate)
+  const monthName = format(date, 'MMMM')
+  const weekNumber = Math.ceil(parseInt(format(date, 'd')) / 7)
+  return `${monthName} Week ${weekNumber}`
+}
+
 export function getStatusColor(status, carryForwardWeeks = 0) {
   if (status === 'on-hold') return 'red'
   if (status === 'carry-forward' || carryForwardWeeks > 0) return 'purple'
