@@ -9,13 +9,13 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
-// Helper function to get all tasks for current week
+// Helper function to get all tasks for a week
 export async function getWeeklyTasks(weekId) {
   const { data, error } = await supabase
     .from('tasks')
     .select('*')
     .eq('week_id', weekId)
-    .is('parent_task_id', null) // Only main tasks
+    .is('parent_task_id', null)
     .order('position', { ascending: true })
 
   if (error) throw error
@@ -48,7 +48,7 @@ export async function getTeamMembers() {
 // Helper function to get current week
 export async function getCurrentWeek() {
   const today = new Date().toISOString().split('T')[0]
-  
+
   const { data, error } = await supabase
     .from('weeks')
     .select('*')
@@ -72,6 +72,45 @@ export async function getWeekById(weekId) {
   return data
 }
 
+// Helper: get or create a week by its Monday start date (YYYY-MM-DD)
+export async function getOrCreateWeek(weekStartDate) {
+  // weekStartDate must be a Monday in 'YYYY-MM-DD' format
+  const d = new Date(weekStartDate)
+  const endDate = new Date(d)
+  endDate.setDate(d.getDate() + 6)
+  const weekEndDate = endDate.toISOString().split('T')[0]
+
+  // Try to fetch first
+  const { data: existing } = await supabase
+    .from('weeks')
+    .select('*')
+    .eq('week_start_date', weekStartDate)
+    .maybeSingle()
+
+  if (existing) return existing
+
+  // Create if missing
+  const { data, error } = await supabase
+    .from('weeks')
+    .insert([{ week_start_date: weekStartDate, week_end_date: weekEndDate }])
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+// Helper: get all weeks ordered by date (for navigation)
+export async function getAllWeeks() {
+  const { data, error } = await supabase
+    .from('weeks')
+    .select('*')
+    .order('week_start_date', { ascending: false })
+
+  if (error) throw error
+  return data || []
+}
+
 // Helper function to calculate total estimated hours
 export async function getTotalEstimatedHours(teamMemberId, weekId) {
   const { data, error } = await supabase
@@ -82,7 +121,7 @@ export async function getTotalEstimatedHours(teamMemberId, weekId) {
     .is('parent_task_id', null)
 
   if (error) throw error
-  
+
   return (data || []).reduce((total, task) => {
     return total + (task.estimated_hours || 0)
   }, 0)
