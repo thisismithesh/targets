@@ -18,7 +18,7 @@ function App() {
           <div className="flex justify-between h-16">
             <div className="flex items-center gap-8">
               <Link to="/" className="text-xl font-bold text-gray-900">
-                📊 Weekly Targets
+                🎯 Weekly Targets
               </Link>
               <div className="flex gap-4">
                 <Link
