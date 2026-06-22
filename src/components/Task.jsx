@@ -257,7 +257,15 @@ export default function Task({
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 
                     onClick={() => setIsEditing(true)}
-                    className={`text-sm font-medium text-gray-900 cursor-pointer hover:underline truncate ${localTaskStatus === 'completed' ? 'line-through text-gray-500' : ''}`}
+                    className={`text-sm font-medium cursor-pointer hover:underline truncate ${
+                      localTaskStatus === 'completed'
+                        ? 'line-through text-gray-500'
+                        : localTaskStatus === 'on-hold'
+                        ? 'text-red-600'
+                        : localCarryForwardWeeks > 0
+                        ? 'text-purple-600'
+                        : 'text-gray-900'
+                    }`}
                   >
                     {task.task_name}
                   </h3>
