@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase, getTeamMembers, getCurrentWeek, getOrCreateWeek } from '../lib/supabase'
 import TeamMemberCard from '../components/TeamMemberCard'
-import { getWeekLabel } from '../lib/utils'
+import { getWeekLabelShort } from '../lib/utils'
 import { addWeeks, subWeeks, startOfWeek, format, parseISO } from 'date-fns'
 
 function getMondayOf(date) {
@@ -85,7 +85,7 @@ export default function Dashboard() {
   const isThisWeek = currentWeekStart === todayWeekStart
   const isNextWeek = todayWeekStart && currentWeekStart > todayWeekStart
 
-  const weekLabel = week ? getWeekLabel(week.week_start_date) : ''
+  const weekLabel = week ? getWeekLabelShort(week.week_start_date) : ''
 
   if (isLoading) {
     return (
