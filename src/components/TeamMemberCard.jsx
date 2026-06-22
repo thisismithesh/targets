@@ -3,14 +3,8 @@ import { Link } from 'react-router-dom'
 import { getSubtasks } from '../lib/supabase'
 import TaskSection from './TaskSection'
 
-export default function TeamMemberCard({
-  teamMember,
-  weekId,
-  tasks,
-  onTaskUpdate,
-}) {
+export default function TeamMemberCard({ teamMember, weekId, tasks, onTaskUpdate }) {
   const [subtaskMap, setSubtaskMap] = useState({})
-  const [totalHours, setTotalHours] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
@@ -20,26 +14,18 @@ export default function TeamMemberCard({
   const loadSubtasks = async () => {
     setIsLoading(true)
     const map = {}
-    let hours = 0
-
-    // Group tasks by heading
     for (const task of tasks) {
       const subtasks = await getSubtasks(task.id)
       map[task.id] = subtasks
-      hours += task.estimated_hours || 0
     }
-
     setSubtaskMap(map)
-    setTotalHours(hours)
     setIsLoading(false)
   }
 
   // Group tasks by heading
   const tasksByHeading = {}
   tasks.forEach((task) => {
-    if (!tasksByHeading[task.heading]) {
-      tasksByHeading[task.heading] = []
-    }
+    if (!tasksByHeading[task.heading]) tasksByHeading[task.heading] = []
     tasksByHeading[task.heading].push(task)
   })
 
@@ -54,16 +40,16 @@ export default function TeamMemberCard({
     )
   }
 
-  const completedCount = tasks.filter(t => t.status === 'completed').length
-  const onHoldCount = tasks.filter(t => t.status === 'on-hold').length
-  const pendingCount = tasks.filter(t => t.status === 'pending').length
+  const completedCount = tasks.filter((t) => t.status === 'completed').length
+  const onHoldCount = tasks.filter((t) => t.status === 'on-hold').length
+  const pendingCount = tasks.filter((t) => t.status === 'pending').length
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-lg transition-shadow">
       <div className="flex items-start justify-between mb-4">
         <div>
           <h2 className="text-xl font-bold text-gray-900">{teamMember.name}</h2>
-          <p className="text-sm text-gray-500">{teamMember.email}</p>
+          <p className="text-sm text-gray-500">{teamMember.team}</p>
         </div>
         <Link
           to={`/team/${teamMember.id}/week/${weekId}`}
@@ -74,10 +60,6 @@ export default function TeamMemberCard({
       </div>
 
       <div className="flex gap-4 mb-4 pb-4 border-b border-gray-200">
-        <div className="text-center">
-          <div className="text-2xl font-bold text-blue-600">{totalHours.toFixed(1)}</div>
-          <div className="text-xs text-gray-500">Total Hours</div>
-        </div>
         <div className="text-center">
           <div className="text-2xl font-bold text-green-600">{completedCount}</div>
           <div className="text-xs text-gray-500">Completed</div>
