@@ -2,11 +2,23 @@ import { useState, useRef, useEffect } from 'react'
 import { getWeeklyTasks } from '../lib/supabase'
 import { getWeekLabelShort } from '../lib/utils'
 
-// AI chatbox for the admin view.
-// Scope: ALWAYS the most recent 4 weeks, gathered independently of the
-// "Total Estimated Hours" week selector. Sends a data snapshot + the
-// question to the /api/chat serverless function.
+// Convert a small subset of markdown to React nodes:
+// - **bold** becomes <strong>
+// - lines are preserved (the container uses whitespace-pre-wrap)
+function renderText(text) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g)
+  return parts.map((part, i) => {
+    const m = part.match(/^\*\*([^*]+)\*\*$/)
+    if (m) return <strong key={i}>{m[1]}</strong>
+    return <span key={i}>{part}</span>
+  })
+}
+
+// Floating AI chatbox for the admin view.
+// Scope: ALWAYS the most recent 4 weeks (up to today), gathered independently
+// of the "Total Estimated Hours" week selector.
 export default function AdminChatbot({ teamMembers, weeks, starCounts }) {
+  const [isOpen, setIsOpen] = useState(false)
   const [messages, setMessages] = useState([]) // { role: 'user'|'assistant', text }
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -16,7 +28,7 @@ export default function AdminChatbot({ teamMembers, weeks, starCounts }) {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [messages, isLoading])
+  }, [messages, isLoading, isOpen])
 
   // The 4 most recent weeks up to today (weeks arrive newest-first).
   // Exclude future weeks (which may exist in the DB but have no tasks yet).
@@ -50,7 +62,7 @@ export default function AdminChatbot({ teamMembers, weeks, starCounts }) {
           .reduce((sum, t) => sum + (t.estimated_hours || 0), 0)
           .toFixed(1)
         const stars = starCounts?.[m.id] || 0
-        lines.push(`- ${m.name} (team: ${m.team || 'n/a'}) — ${myTasks.length} task(s), ${totalHours}h, ${stars} total star(s)`)
+        lines.push(`- ${m.name} (team: ${m.team || 'n/a'}) - ${myTasks.length} task(s), ${totalHours}h, ${stars} total star(s)`)
         myTasks.forEach((t) => {
           const parts = [`"${t.task_name}"`, `status: ${t.status}`]
           if (t.heading) parts.push(`category: ${t.heading}`)
@@ -76,10 +88,7 @@ export default function AdminChatbot({ teamMembers, weeks, starCounts }) {
     try {
       const context = await buildContext()
       // Send prior turns so Claude can answer follow-up questions.
-      const history = messages.map((m) => ({
-        role: m.role,
-        content: m.text,
-      }))
+      const history = messages.map((m) => ({ role: m.role, content: m.text }))
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -114,82 +123,105 @@ export default function AdminChatbot({ teamMembers, weeks, starCounts }) {
   }
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-6">
-      <div className="flex items-baseline justify-between mb-1">
-        <h2 className="text-xl font-bold text-gray-900">Ask about the data</h2>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-gray-400">{scopeLabel}</span>
-          {messages.length > 0 && (
-            <button
-              onClick={newChat}
-              disabled={isLoading}
-              className="text-xs text-blue-600 hover:text-blue-700 font-medium underline disabled:opacity-50"
-            >
-              New chat
-            </button>
-          )}
-        </div>
-      </div>
-      <p className="text-sm text-gray-500 mb-4">
-        Ask questions about the last 4 weeks - tasks, hours, who's behind, stars, and more.
-      </p>
-
-      <div
-        ref={scrollRef}
-        className="h-72 overflow-y-auto rounded-md bg-gray-50 border border-gray-100 p-3 space-y-3"
-      >
-        {messages.length === 0 && (
-          <div className="text-sm text-gray-400 space-y-1">
-            <p>Try asking:</p>
-            <p>- "Who has the most incomplete tasks recently?"</p>
-            <p>- "Summarise how the team did over the last few weeks."</p>
-            <p>- "Who is overloaded on hours?"</p>
+    <div className="fixed bottom-6 right-6 z-[90] flex flex-col items-end">
+      {/* Chat panel */}
+      {isOpen && (
+        <div className="chat-pop mb-3 w-[380px] max-w-[calc(100vw-3rem)] bg-white rounded-2xl border border-gray-200 shadow-2xl flex flex-col overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+            <div>
+              <h2 className="text-base font-bold text-gray-900 leading-tight">Ask about the data</h2>
+              <p className="text-xs text-gray-400">{scopeLabel}</p>
+            </div>
+            <div className="flex items-center gap-3">
+              {messages.length > 0 && (
+                <button
+                  onClick={newChat}
+                  disabled={isLoading}
+                  className="text-xs text-blue-600 hover:text-blue-700 font-medium underline disabled:opacity-50"
+                >
+                  New chat
+                </button>
+              )}
+              <button
+                onClick={() => setIsOpen(false)}
+                className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+                title="Close"
+              >
+                &times;
+              </button>
+            </div>
           </div>
-        )}
 
-        {messages.map((m, i) => (
+          {/* Messages */}
           <div
-            key={i}
-            className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            ref={scrollRef}
+            className="h-80 overflow-y-auto bg-gray-50 p-3 space-y-3"
           >
-            <div
-              className={`max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
-                m.role === 'user'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white border border-gray-200 text-gray-800'
-              }`}
+            {messages.length === 0 && (
+              <div className="text-sm text-gray-400 space-y-1">
+                <p>Try asking:</p>
+                <p>- "Who has the most incomplete tasks recently?"</p>
+                <p>- "Summarise how the team did recently."</p>
+                <p>- "Who is overloaded on hours?"</p>
+              </div>
+            )}
+
+            {messages.map((m, i) => (
+              <div
+                key={i}
+                className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
+                <div
+                  className={`max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
+                    m.role === 'user'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white border border-gray-200 text-gray-800'
+                  }`}
+                >
+                  {renderText(m.text)}
+                </div>
+              </div>
+            ))}
+
+            {isLoading && (
+              <div className="flex justify-start">
+                <div className="bg-white border border-gray-200 text-gray-400 rounded-lg px-3 py-2 text-sm">
+                  Thinking...
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Input */}
+          <div className="p-3 flex gap-2 border-t border-gray-100">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={onKeyDown}
+              placeholder="Ask a question..."
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              onClick={send}
+              disabled={isLoading || !input.trim()}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {m.text}
-            </div>
+              Send
+            </button>
           </div>
-        ))}
+        </div>
+      )}
 
-        {isLoading && (
-          <div className="flex justify-start">
-            <div className="bg-white border border-gray-200 text-gray-400 rounded-lg px-3 py-2 text-sm">
-              Thinking...
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="mt-3 flex gap-2">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={onKeyDown}
-          placeholder="Ask a question..."
-          className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <button
-          onClick={send}
-          disabled={isLoading || !input.trim()}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Send
-        </button>
-      </div>
+      {/* Floating bubble */}
+      <button
+        onClick={() => setIsOpen((v) => !v)}
+        className="w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg flex items-center justify-center text-2xl transition-transform hover:scale-105"
+        title={isOpen ? 'Close chat' : 'Ask about the data'}
+      >
+        {isOpen ? '\u00D7' : '\uD83D\uDCAC'}
+      </button>
     </div>
   )
 }
