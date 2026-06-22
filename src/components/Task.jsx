@@ -28,6 +28,8 @@ export default function Task({
   const statusColor = getStatusColor(localTaskStatus, localCarryForwardWeeks)
   const holdTooltipTimer = useRef(null)
   const carryForwardTooltipTimer = useRef(null)
+  const holdWrapperRef = useRef(null)
+  const carryForwardWrapperRef = useRef(null)
 
   const handleHoldMouseEnter = () => {
     if (localTaskStatus === 'on-hold') {
@@ -52,6 +54,31 @@ export default function Task({
   const handleCarryForwardMouseLeave = () => {
     if (carryForwardTooltipTimer.current) clearTimeout(carryForwardTooltipTimer.current)
   }
+
+  // Dismiss either tooltip when clicking anywhere outside of it
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        showHoldTooltip &&
+        holdWrapperRef.current &&
+        !holdWrapperRef.current.contains(event.target)
+      ) {
+        setShowHoldTooltip(false)
+        setShowHoldEditor(false)
+      }
+      if (
+        showCarryForwardTooltip &&
+        carryForwardWrapperRef.current &&
+        !carryForwardWrapperRef.current.contains(event.target)
+      ) {
+        setShowCarryForwardTooltip(false)
+        setShowCarryForwardEditor(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showHoldTooltip, showCarryForwardTooltip])
 
   const toggleOnHold = async () => {
     const newStatus = localTaskStatus === 'on-hold' ? 'pending' : 'on-hold'
@@ -149,7 +176,7 @@ export default function Task({
                   type="text"
                   value={editedName}
                   onChange={(e) => setEditedName(e.target.value)}
-                  className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                  className="flex-[7] min-w-0 px-2 py-1 border border-gray-300 rounded text-sm"
                   autoFocus
                   placeholder="Task name"
                 />
@@ -157,7 +184,7 @@ export default function Task({
                   type="date"
                   value={editedDeadline}
                   onChange={(e) => setEditedDeadline(e.target.value)}
-                  className="px-2 py-1 border border-gray-300 rounded text-xs w-24"
+                  className="flex-[1.5] min-w-0 px-1 py-1 border border-gray-300 rounded text-xs"
                 />
                 <input
                   type="number"
@@ -165,7 +192,7 @@ export default function Task({
                   value={editedHours}
                   onChange={(e) => setEditedHours(e.target.value)}
                   placeholder="h"
-                  className="w-12 px-2 py-1 border border-gray-300 rounded text-xs"
+                  className="flex-[1] min-w-0 px-1 py-1 border border-gray-300 rounded text-xs"
                 />
                 <button
                   onClick={saveTaskEdit}
@@ -213,16 +240,17 @@ export default function Task({
 
               {/* Hold Icon Button */}
               <div 
+                ref={holdWrapperRef}
                 className="relative"
                 onMouseEnter={handleHoldMouseEnter}
                 onMouseLeave={handleHoldMouseLeave}
               >
                 <button
                   onClick={toggleOnHold}
-                  className={`w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold transition-colors flex-shrink-0 ${
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xl font-bold leading-none transition-colors flex-shrink-0 bg-white text-red-600 ${
                     localTaskStatus === 'on-hold'
-                      ? 'bg-red-500 text-white'
-                      : 'bg-red-200 text-red-600 hover:bg-red-300'
+                      ? 'border-2 border-red-500'
+                      : 'border border-red-200 hover:border-red-400'
                   }`}
                   title="Hold status"
                 >
@@ -269,16 +297,17 @@ export default function Task({
 
               {/* Carry Forward Icon Button */}
               <div 
+                ref={carryForwardWrapperRef}
                 className="relative"
                 onMouseEnter={handleCarryForwardMouseEnter}
                 onMouseLeave={handleCarryForwardMouseLeave}
               >
                 <button
                   onClick={toggleCarryForward}
-                  className={`w-6 h-6 rounded-full flex items-center justify-center text-sm font-bold transition-colors flex-shrink-0 ${
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xl font-bold leading-none transition-colors flex-shrink-0 bg-white text-red-600 ${
                     localCarryForwardWeeks > 0
-                      ? 'bg-purple-500 text-white'
-                      : 'bg-purple-200 text-purple-600 hover:bg-purple-300'
+                      ? 'border-2 border-purple-500'
+                      : 'border border-purple-200 hover:border-purple-400'
                   }`}
                   title="Carry forward status"
                 >
