@@ -247,14 +247,18 @@ export default function Task({
               >
                 <button
                   onClick={toggleOnHold}
-                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xl font-bold leading-none transition-colors flex-shrink-0 bg-white text-red-600 ${
+                  className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors flex-shrink-0 bg-white border ${
                     localTaskStatus === 'on-hold'
-                      ? 'border-2 border-red-500'
-                      : 'border border-red-200 hover:border-red-400'
+                      ? 'border-gray-500'
+                      : 'border-gray-300 hover:border-gray-400'
                   }`}
                   title="Hold status"
                 >
-                  •
+                  <span
+                    className={`block w-4 h-4 rounded-full ${
+                      localTaskStatus === 'on-hold' ? 'bg-red-600' : 'bg-red-300'
+                    }`}
+                  />
                 </button>
                 {showHoldTooltip && localTaskStatus === 'on-hold' && (
                   <div
@@ -304,14 +308,18 @@ export default function Task({
               >
                 <button
                   onClick={toggleCarryForward}
-                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xl font-bold leading-none transition-colors flex-shrink-0 bg-white text-red-600 ${
+                  className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors flex-shrink-0 bg-white border ${
                     localCarryForwardWeeks > 0
-                      ? 'border-2 border-purple-500'
-                      : 'border border-purple-200 hover:border-purple-400'
+                      ? 'border-gray-500'
+                      : 'border-gray-300 hover:border-gray-400'
                   }`}
                   title="Carry forward status"
                 >
-                  •
+                  <span
+                    className={`block w-4 h-4 rounded-full ${
+                      localCarryForwardWeeks > 0 ? 'bg-purple-600' : 'bg-purple-300'
+                    }`}
+                  />
                 </button>
                 {showCarryForwardTooltip && localCarryForwardWeeks > 0 && (
                   <div
