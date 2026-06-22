@@ -129,39 +129,46 @@ export default function AdminChatbot({ teamMembers, weeks, starCounts }) {
     <div className="fixed bottom-6 right-6 z-[90] flex flex-col items-end">
       {/* Chat panel */}
       {isOpen && (
-        <div className="chat-pop mb-3 w-[420px] max-w-[calc(100vw-3rem)] max-h-[calc(100vh-7rem)] bg-white rounded-2xl border border-gray-200 shadow-2xl flex flex-col overflow-hidden">
+        <div className="chat-pop relative mb-3 w-[420px] max-w-[calc(100vw-3rem)] max-h-[calc(100vh-7rem)] bg-white rounded-2xl border border-gray-200 shadow-2xl flex flex-col overflow-hidden">
+          {/* Close button — top-right corner, equal spacing from top and right */}
+          <button
+            onClick={() => setIsOpen(false)}
+            className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 text-lg leading-none"
+            title="Close"
+          >
+            &times;
+          </button>
+
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <div>
               <h2 className="text-lg font-bold text-gray-900 leading-tight">Ask about the data</h2>
-              <select
-                value={scope}
-                onChange={(e) => setScope(Number(e.target.value))}
-                className="mt-1.5 w-auto text-xs text-gray-600 bg-white border border-gray-300 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                title="Choose how much data to include"
-              >
-                {scopeOptions.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex items-center gap-3">
-              {messages.length > 0 && (
-                <button
-                  onClick={newChat}
-                  disabled={isLoading}
-                  className="text-xs text-blue-600 hover:text-blue-700 font-medium underline disabled:opacity-50"
-                >
-                  New chat
-                </button>
-              )}
-              <button
-                onClick={() => setIsOpen(false)}
-                className="text-gray-400 hover:text-gray-600 text-lg leading-none"
-                title="Close"
-              >
-                &times;
-              </button>
+              <div className="mt-1.5 flex items-center gap-3">
+                <div className="relative inline-block">
+                  <select
+                    value={scope}
+                    onChange={(e) => setScope(Number(e.target.value))}
+                    className="appearance-none w-auto text-xs text-gray-600 bg-white border border-gray-300 rounded-md pl-2.5 pr-7 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                    title="Choose how much data to include"
+                  >
+                    {scopeOptions.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                  <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-[10px]">
+                    &#9660;
+                  </span>
+                </div>
+                {messages.length > 0 && (
+                  <button
+                    onClick={newChat}
+                    disabled={isLoading}
+                    className="text-xs text-blue-600 hover:text-blue-700 font-medium underline disabled:opacity-50"
+                  >
+                    New chat
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -229,10 +236,12 @@ export default function AdminChatbot({ teamMembers, weeks, starCounts }) {
       {/* Floating bubble */}
       <button
         onClick={() => setIsOpen((v) => !v)}
-        className="w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg flex items-center justify-center text-2xl transition-transform hover:scale-105"
+        className="w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg flex items-center justify-center transition-transform hover:scale-105"
         title={isOpen ? 'Close chat' : 'Ask about the data'}
       >
-        {isOpen ? '\u00D7' : '\uD83D\uDCAC'}
+        <span className="leading-none" style={{ fontSize: isOpen ? '26px' : '24px', lineHeight: 1 }}>
+          {isOpen ? '\u00D7' : '\uD83D\uDCAC'}
+        </span>
       </button>
     </div>
   )
