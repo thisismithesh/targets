@@ -14,7 +14,6 @@ export default function Task({
   onDrop,
   onDragEnd,
   isDragging = false,
-  isDragOver = false,
 }) {
   const [showSubtasks, setShowSubtasks] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
@@ -170,7 +169,7 @@ export default function Task({
           localTaskStatus === 'on-hold' ? 'on-hold' : 
           localTaskStatus === 'carry-forward' || localCarryForwardWeeks > 0 ? 'carry-forward' :
           localTaskStatus === 'completed' ? 'completed' : ''
-        } ${isSubtask ? 'ml-8 border-l-4' : ''} ${isDragging ? 'opacity-40' : ''} ${isDragOver ? 'border-t-2 border-t-blue-500' : ''}`}
+        } ${isSubtask ? 'ml-8 border-l-4' : ''} ${isDragging ? 'opacity-40' : ''} transition-shadow`}
       >
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -410,7 +409,7 @@ export default function Task({
                 ) : (
                   <button
                     onClick={() => setConfirmingDelete(true)}
-                    className="text-xs text-red-600 hover:text-red-700 font-medium flex-shrink-0"
+                    className="px-2 text-xs text-red-600 hover:text-red-700 font-medium flex-shrink-0"
                     title="Delete task"
                   >
                     ✕
