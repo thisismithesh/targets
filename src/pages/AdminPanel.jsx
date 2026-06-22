@@ -8,6 +8,7 @@ import {
   getWeeklyTasks,
   getCurrentWeek,
 } from '../lib/supabase'
+import { getWeekLabelShort } from '../lib/utils'
 
 export default function AdminPanel() {
   const [teamMembers, setTeamMembers] = useState([])
@@ -249,7 +250,7 @@ export default function AdminPanel() {
             >
               {weeks.map((w) => (
                 <option key={w.id} value={w.id}>
-                  {w.week_start_date} → {w.week_end_date}
+                  {getWeekLabelShort(w.week_start_date)}
                 </option>
               ))}
             </select>
