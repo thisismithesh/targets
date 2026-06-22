@@ -185,55 +185,27 @@ export default function Task({
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             {(onMoveUp || onMoveDown) && !isEditing && (
-              <div className="grid grid-cols-3 grid-rows-3 flex-shrink-0 -my-1 w-[42px] h-[42px] place-items-center text-[10px] leading-none">
-                {/* row 1: up */}
-                <span />
+              <div className="flex flex-col flex-shrink-0 -my-1">
                 <button
                   onClick={onMoveUp}
                   disabled={!canMoveUp}
-                  className={`w-full h-full flex items-center justify-center ${
+                  className={`px-1.5 leading-none text-xs ${
                     canMoveUp ? 'text-gray-400 hover:text-gray-700' : 'text-gray-200 cursor-default'
                   }`}
                   title="Move up"
                 >
                   ▲
                 </button>
-                <span />
-                {/* row 2: left · center · right */}
-                <button
-                  onClick={onOutdent}
-                  disabled={!task.is_indented}
-                  className={`w-full h-full flex items-center justify-center ${
-                    task.is_indented ? 'text-gray-400 hover:text-gray-700' : 'text-gray-200 cursor-default'
-                  }`}
-                  title="Outdent (move left)"
-                >
-                  ◀
-                </button>
-                <span />
-                <button
-                  onClick={onIndent}
-                  disabled={task.is_indented}
-                  className={`w-full h-full flex items-center justify-center ${
-                    !task.is_indented ? 'text-gray-400 hover:text-gray-700' : 'text-gray-200 cursor-default'
-                  }`}
-                  title="Indent (move right)"
-                >
-                  ▶
-                </button>
-                {/* row 3: down */}
-                <span />
                 <button
                   onClick={onMoveDown}
                   disabled={!canMoveDown}
-                  className={`w-full h-full flex items-center justify-center ${
+                  className={`px-1.5 leading-none text-xs ${
                     canMoveDown ? 'text-gray-400 hover:text-gray-700' : 'text-gray-200 cursor-default'
                   }`}
                   title="Move down"
                 >
                   ▼
                 </button>
-                <span />
               </div>
             )}
             <input
@@ -419,6 +391,17 @@ export default function Task({
                   </div>
                 )}
               </div>
+
+              {/* Indent toggle (> indents, < outdents) — x-button style */}
+              {(onIndent || onOutdent) && (
+                <button
+                  onClick={() => (task.is_indented ? onOutdent && onOutdent() : onIndent && onIndent())}
+                  className="px-2 text-xs text-gray-400 hover:text-gray-700 font-medium flex-shrink-0"
+                  title={task.is_indented ? 'Outdent' : 'Indent'}
+                >
+                  {task.is_indented ? '<' : '>'}
+                </button>
+              )}
 
               {/* Delete Button (inline two-step confirm) */}
               {onDeleteTask && (
