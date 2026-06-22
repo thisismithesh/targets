@@ -1,9 +1,12 @@
 // Vercel serverless function: /api/chat
 // Holds the secret Anthropic API key (server-side) and proxies questions to Claude.
 // The browser never sees the key - it only calls this endpoint.
+//
+// Prompt caching: the instructions + dataset are sent as a cacheable system
+// block (cache_control), so repeated questions over the same data pay ~10%
+// for that block instead of full price. The question/history stay dynamic.
 
 export default async function handler(req, res) {
-  // Only allow POST
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
@@ -24,8 +27,7 @@ export default async function handler(req, res) {
     const safeQuestion = question.slice(0, 2000)
     const safeContext = typeof context === 'string' ? context.slice(0, 120000) : ''
 
-    // Sanitize incoming conversation history. Keep only the last 10 turns,
-    // only valid roles, and cap each message's length.
+    // Sanitize conversation history (last 10 turns, valid roles, length-capped).
     const safeHistory = Array.isArray(history)
       ? history
           .filter(
@@ -38,7 +40,8 @@ export default async function handler(req, res) {
           .map((m) => ({ role: m.role, content: m.content.slice(0, 4000) }))
       : []
 
-    const systemPrompt =
+    // Static instructions — identical on every request, so they cache cleanly.
+    const instructions =
       "You are a sharp, friendly colleague helping a manager understand their team's weekly task data. " +
       "You answer using ONLY the data provided below.\n\n" +
       "HOW TO WRITE (very important):\n" +
@@ -58,10 +61,18 @@ export default async function handler(req, res) {
       "- Do all counting and summing SILENTLY in your head. Never show your working, never write out calculations like \"4 + 0.5 + 12\", and never say things like \"let me recount\" or correct yourself mid-answer.\n" +
       "- Work out the correct figures first, then give one clean final answer with only the final numbers.\n" +
       "- Make sure any ranking matches the actual numbers. If the answer isn't in the data, say so plainly.\n\n" +
-      "Earlier messages in this conversation are provided for context so you can answer follow-up questions.\n\n" +
-      "=== CURRENT DATA ===\n" + safeContext
+      "Earlier messages in this conversation are provided for context so you can answer follow-up questions."
 
-    // Build the messages array: prior turns, then the new question.
+    // System prompt as blocks. The combined instructions+data block is marked
+    // cacheable, so identical repeat requests read it at ~10% input price.
+    const system = [
+      {
+        type: 'text',
+        text: instructions + "\n\n=== CURRENT DATA ===\n" + safeContext,
+        cache_control: { type: 'ephemeral' },
+      },
+    ]
+
     const messages = [...safeHistory, { role: 'user', content: safeQuestion }]
 
     const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
@@ -74,7 +85,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 1024,
-        system: systemPrompt,
+        system,
         messages,
       }),
     })
@@ -86,6 +97,12 @@ export default async function handler(req, res) {
     }
 
     const data = await anthropicRes.json()
+
+    // Log cache usage so we can confirm caching is actually working.
+    if (data.usage) {
+      console.log('cache usage:', JSON.stringify(data.usage))
+    }
+
     const answer = (data.content || [])
       .filter((b) => b.type === 'text')
       .map((b) => b.text)
