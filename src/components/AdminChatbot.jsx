@@ -3,13 +3,24 @@ import { getWeeklyTasks } from '../lib/supabase'
 import { getWeekLabelShort } from '../lib/utils'
 
 // Convert a small subset of markdown to React nodes:
-// - **bold** becomes <strong>
-// - lines are preserved (the container uses whitespace-pre-wrap)
+// - **bold**   -> <strong>
+// - __underline__ -> <u>
+// - *italic*   -> <em>
+// Lines are preserved (the container uses whitespace-pre-wrap).
 function renderText(text) {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g)
+  // Match **bold**, then __underline__, then *italic* (bold checked before italic).
+  const regex = /(\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*)/g
+  const parts = text.split(regex)
   return parts.map((part, i) => {
-    const m = part.match(/^\*\*([^*]+)\*\*$/)
-    if (m) return <strong key={i}>{m[1]}</strong>
+    if (/^\*\*[^*]+\*\*$/.test(part)) {
+      return <strong key={i}>{part.slice(2, -2)}</strong>
+    }
+    if (/^__[^_]+__$/.test(part)) {
+      return <u key={i}>{part.slice(2, -2)}</u>
+    }
+    if (/^\*[^*]+\*$/.test(part)) {
+      return <em key={i}>{part.slice(1, -1)}</em>
+    }
     return <span key={i}>{part}</span>
   })
 }
@@ -133,7 +144,7 @@ export default function AdminChatbot({ teamMembers, weeks, starCounts }) {
           {/* Close button — top-right corner */}
           <button
             onClick={() => setIsOpen(false)}
-            className="absolute top-3 right-4 text-gray-400 hover:text-gray-600 text-lg leading-none"
+            className="absolute top-3 right-5 text-gray-400 hover:text-gray-600 text-lg leading-none"
             title="Close"
           >
             &times;
