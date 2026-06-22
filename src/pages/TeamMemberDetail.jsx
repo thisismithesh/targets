@@ -4,7 +4,7 @@ import { supabase, getSubtasks, getTeamMemberById, getWeekById, createTask, dele
 import Task from '../components/Task'
 import { getWeekLabelShort } from '../lib/utils'
 
-const HEADINGS = ['General', 'Development', 'Design', 'Research', 'Meetings', 'Other']
+const DEFAULT_HEADINGS = ['General', 'Development', 'Design', 'Research', 'Meetings', 'Other']
 
 export default function TeamMemberDetail() {
   const { memberId, weekId } = useParams()
@@ -105,6 +105,15 @@ export default function TeamMemberDetail() {
     }
   }
 
+  // Build the list of available Project/Category options for this page:
+  // the default headings plus any custom headings already used by tasks here.
+  const categoryOptions = Array.from(
+    new Set([
+      ...DEFAULT_HEADINGS,
+      ...tasks.map((t) => t.heading).filter(Boolean),
+    ])
+  )
+
   // Group tasks by heading
   const tasksByHeading = {}
   tasks.forEach((task) => {
@@ -170,14 +179,18 @@ export default function TeamMemberDetail() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
-                    <select
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Project/Category</label>
+                    <input
+                      type="text"
+                      list="category-options"
                       value={newTask.heading}
                       onChange={(e) => setNewTask({ ...newTask, heading: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      {HEADINGS.map((h) => <option key={h} value={h}>{h}</option>)}
-                    </select>
+                      placeholder="Select or type a project/category"
+                    />
+                    <datalist id="category-options">
+                      {categoryOptions.map((h) => <option key={h} value={h} />)}
+                    </datalist>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Est. Hours</label>
