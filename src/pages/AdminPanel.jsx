@@ -14,6 +14,7 @@ export default function AdminPanel() {
   const [teamMembers, setTeamMembers] = useState([])
   const [weeks, setWeeks] = useState([])
   const [selectedWeekId, setSelectedWeekId] = useState('')
+  const [currentWeekId, setCurrentWeekId] = useState('')
   const [hoursByMember, setHoursByMember] = useState({})
   const [isLoading, setIsLoading] = useState(true)
   const [newMemberName, setNewMemberName] = useState('')
@@ -42,6 +43,7 @@ export default function AdminPanel() {
       if (allWeeks.length > 0) {
         const currentWeek = await getCurrentWeek()
         const weekToSelect = allWeeks.find(w => w.id === currentWeek.id) || allWeeks[0]
+        setCurrentWeekId(currentWeek?.id || '')
         setSelectedWeekId(weekToSelect.id)
       }
     } catch (err) {
@@ -72,6 +74,17 @@ export default function AdminPanel() {
   const showMessage = (msg) => {
     setMessage(msg)
     setTimeout(() => setMessage(''), 3000)
+  }
+
+  // Week navigation for the hours section.
+  // weeks are ordered newest-first, so a lower index = newer week.
+  const selectedWeekIndex = weeks.findIndex((w) => w.id === selectedWeekId)
+  const selectedWeek = weeks[selectedWeekIndex]
+  const goToOlderWeek = () => {
+    if (selectedWeekIndex < weeks.length - 1) setSelectedWeekId(weeks[selectedWeekIndex + 1].id)
+  }
+  const goToNewerWeek = () => {
+    if (selectedWeekIndex > 0) setSelectedWeekId(weeks[selectedWeekIndex - 1].id)
   }
 
   const handleAddTeamMember = async (e) => {
@@ -242,18 +255,37 @@ export default function AdminPanel() {
         <div className="bg-white rounded-lg border border-gray-200 p-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4">Total Estimated Hours by Members</h2>
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Select Week</label>
-            <select
-              value={selectedWeekId}
-              onChange={(e) => setSelectedWeekId(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {weeks.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {getWeekLabelShort(w.week_start_date)}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center justify-between gap-3">
+              <button
+                onClick={goToOlderWeek}
+                disabled={selectedWeekIndex >= weeks.length - 1}
+                className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 font-medium flex-shrink-0 disabled:opacity-40 disabled:cursor-default disabled:hover:bg-white"
+              >
+                ←
+              </button>
+
+              <div className="flex flex-1 items-center justify-center gap-2">
+                <span className="text-base font-medium text-gray-700">
+                  {selectedWeek ? getWeekLabelShort(selectedWeek.week_start_date) : ''}
+                </span>
+                {currentWeekId && selectedWeekId !== currentWeekId && (
+                  <button
+                    onClick={() => setSelectedWeekId(currentWeekId)}
+                    className="px-2 py-0.5 text-xs text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    Current week
+                  </button>
+                )}
+              </div>
+
+              <button
+                onClick={goToNewerWeek}
+                disabled={selectedWeekIndex <= 0}
+                className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 font-medium flex-shrink-0 disabled:opacity-40 disabled:cursor-default disabled:hover:bg-white"
+              >
+                →
+              </button>
+            </div>
           </div>
 
           <div className="space-y-2">
