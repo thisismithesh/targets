@@ -25,6 +25,7 @@ export default function TeamMemberDetail() {
     estimated_hours: '',
   })
   const [addMessage, setAddMessage] = useState('')
+  const [expandedHeading, setExpandedHeading] = useState(null)
 
   useEffect(() => {
     loadData()
@@ -85,8 +86,7 @@ export default function TeamMemberDetail() {
         status: 'pending',
         position: tasks.length,
       })
-      setNewTask({ task_name: '', heading: 'General', deadline: '', estimated_hours: '' })
-      setShowAddForm(false)
+      setNewTask({ task_name: '', heading: expandedHeading || 'General', deadline: '', estimated_hours: '' })
       setAddMessage('')
       handleTaskUpdate()
     } catch (err) {
@@ -151,7 +151,7 @@ export default function TeamMemberDetail() {
 
           {/* Add Task Form */}
           {showAddForm && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-5 mb-6">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
               <h3 className="text-base font-semibold text-gray-900 mb-3">New Task</h3>
               {addMessage && (
                 <p className="mb-3 text-sm text-red-600">{addMessage}</p>
@@ -171,20 +171,16 @@ export default function TeamMemberDetail() {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
-                    <input
-                      type="text"
+                    <select
                       value={newTask.heading}
                       onChange={(e) => setNewTask({ ...newTask, heading: e.target.value })}
-                      list="heading-options"
                       className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g., Development"
-                    />
-                    <datalist id="heading-options">
-                      {HEADINGS.map((h) => <option key={h} value={h} />)}
-                    </datalist>
+                    >
+                      {HEADINGS.map((h) => <option key={h} value={h}>{h}</option>)}
+                    </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Estimated Hours</label>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Est. Hours</label>
                     <input
                       type="number"
                       step="0.5"
@@ -257,9 +253,22 @@ export default function TeamMemberDetail() {
             <div className="bg-white rounded-lg border border-gray-200 p-6">
               {Object.entries(tasksByHeading).map(([heading, headingTasks]) => (
                 <div key={heading} className="mb-6">
-                  <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3 pb-2 border-b border-gray-200">
-                    {heading}
-                  </h2>
+                  <div className="flex items-center justify-between mb-3 pb-2 border-b border-gray-200">
+                    <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                      {heading}
+                    </h2>
+                    <button
+                      onClick={() => {
+                        setShowAddForm(true)
+                        setExpandedHeading(heading)
+                        setNewTask({ ...newTask, heading })
+                      }}
+                      className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                      title={`Add task to ${heading}`}
+                    >
+                      + Add
+                    </button>
+                  </div>
                   <div className="space-y-2">
                     {headingTasks.map((task) => (
                       <Task
