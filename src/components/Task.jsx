@@ -29,6 +29,7 @@ export default function Task({
   const [showCarryForwardEditor, setShowCarryForwardEditor] = useState(false)
   const [localTaskStatus, setLocalTaskStatus] = useState(task.status)
   const [localCarryForwardWeeks, setLocalCarryForwardWeeks] = useState(task.carry_forward_weeks || 0)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
   const holdTooltipRef = useRef(null)
   const carryForwardTooltipRef = useRef(null)
   const tooltipContainerRef = useRef(null)
@@ -387,15 +388,34 @@ export default function Task({
                 )}
               </div>
 
-              {/* Delete Button */}
+              {/* Delete Button (inline two-step confirm) */}
               {onDeleteTask && (
-                <button
-                  onClick={() => onDeleteTask(task.id)}
-                  className="text-xs text-red-600 hover:text-red-700 font-medium flex-shrink-0"
-                  title="Delete task"
-                >
-                  ✕
-                </button>
+                confirmingDelete ? (
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => { setConfirmingDelete(false); onDeleteTask(task.id) }}
+                      className="px-1.5 py-0.5 bg-red-600 text-white text-xs rounded hover:bg-red-700"
+                      title="Confirm delete"
+                    >
+                      Delete
+                    </button>
+                    <button
+                      onClick={() => setConfirmingDelete(false)}
+                      className="px-1.5 py-0.5 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300"
+                      title="Cancel"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmingDelete(true)}
+                    className="text-xs text-red-600 hover:text-red-700 font-medium flex-shrink-0"
+                    title="Delete task"
+                  >
+                    ✕
+                  </button>
+                )
               )}
             </div>
           )}
