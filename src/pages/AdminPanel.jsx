@@ -7,14 +7,17 @@ import {
   getAllWeeks,
   getWeeklyTasks,
   getCurrentWeek,
+  getStarCounts,
 } from '../lib/supabase'
 import { getWeekLabelShort } from '../lib/utils'
+import Stars from '../components/Stars'
 
 export default function AdminPanel() {
   const [teamMembers, setTeamMembers] = useState([])
   const [weeks, setWeeks] = useState([])
   const [selectedWeekId, setSelectedWeekId] = useState('')
   const [currentWeekId, setCurrentWeekId] = useState('')
+  const [starCounts, setStarCounts] = useState({})
   const [hoursByMember, setHoursByMember] = useState({})
   const [isLoading, setIsLoading] = useState(true)
   const [newMemberName, setNewMemberName] = useState('')
@@ -38,6 +41,12 @@ export default function AdminPanel() {
       const [members, allWeeks] = await Promise.all([getTeamMembers(), getAllWeeks()])
       setTeamMembers(members)
       setWeeks(allWeeks)
+
+      try {
+        setStarCounts(await getStarCounts())
+      } catch (e) {
+        console.error('Error loading stars:', e)
+      }
       
       // Set current week as default
       if (allWeeks.length > 0) {
@@ -223,7 +232,10 @@ export default function AdminPanel() {
                   ) : (
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-medium text-gray-900">{member.name}</p>
+                        <p className="font-medium text-gray-900 flex items-center gap-1.5">
+                          <span>{member.name}</span>
+                          <Stars count={starCounts[member.id] || 0} />
+                        </p>
                         <p className="text-xs text-gray-500">{member.team}</p>
                       </div>
                       <div className="flex gap-1">
@@ -292,7 +304,10 @@ export default function AdminPanel() {
             {teamMembers.map((member) => (
               <div key={member.id} className="flex items-center justify-between p-3 bg-gray-50 rounded">
                 <div>
-                  <p className="font-medium text-gray-900 text-sm">{member.name}</p>
+                  <p className="font-medium text-gray-900 text-sm flex items-center gap-1.5">
+                    <span>{member.name}</span>
+                    <Stars count={starCounts[member.id] || 0} />
+                  </p>
                   <p className="text-xs text-gray-500">{member.team}</p>
                 </div>
                 <div className="text-right">
