@@ -1,7 +1,16 @@
-import { Outlet, Link } from 'react-router-dom'
+import { Outlet, Link, useNavigate } from 'react-router-dom'
+import { useAuth } from './context/AuthContext'
 import './App.css'
 
 function App() {
+  const { session, signOut } = useAuth()
+  const navigate = useNavigate()
+
+  const handleSignOut = async () => {
+    await signOut()
+    navigate('/')
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <nav className="bg-white shadow-sm">
@@ -18,14 +27,35 @@ function App() {
                 >
                   Dashboard
                 </Link>
-                <Link
-                  to="/admin"
-                  className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
-                >
-                  Admin
-                </Link>
+                {session ? (
+                  <Link
+                    to="/admin"
+                    className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+                  >
+                    Admin
+                  </Link>
+                ) : (
+                  <Link
+                    to="/login"
+                    className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+                  >
+                    Admin
+                  </Link>
+                )}
               </div>
             </div>
+
+            {session && (
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-gray-500">{session.user.email}</span>
+                <button
+                  onClick={handleSignOut}
+                  className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 font-medium"
+                >
+                  Sign Out
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </nav>
