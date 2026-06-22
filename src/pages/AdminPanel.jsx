@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase, getTeamMembers, getCurrentWeek, createTeamMember, createTask } from '../lib/supabase'
+import { supabase, getTeamMembers, getCurrentWeek, createTeamMember, updateTeamMember, deleteTeamMember, createTask } from '../lib/supabase'
 
 export default function AdminPanel() {
   const [teamMembers, setTeamMembers] = useState([])
@@ -15,6 +15,9 @@ export default function AdminPanel() {
     estimated_hours: '',
   })
   const [message, setMessage] = useState('')
+  const [editingMember, setEditingMember] = useState(null) // { id, name, email }
+  const [editName, setEditName] = useState('')
+  const [editEmail, setEditEmail] = useState('')
 
   useEffect(() => {
     loadData()
@@ -95,6 +98,42 @@ export default function AdminPanel() {
     }
   }
 
+  const handleEditTeamMember = (member) => {
+    setEditingMember(member)
+    setEditName(member.name)
+    setEditEmail(member.email)
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editName || !editEmail) {
+      setMessage('Please fill in all fields')
+      return
+    }
+    try {
+      await updateTeamMember(editingMember.id, { name: editName, email: editEmail })
+      setEditingMember(null)
+      setMessage('Team member updated successfully!')
+      await loadData()
+      setTimeout(() => setMessage(''), 3000)
+    } catch (err) {
+      setMessage('Error updating team member')
+      console.error(err)
+    }
+  }
+
+  const handleDeleteTeamMember = async (memberId) => {
+    if (!window.confirm('Delete this team member? Their tasks will also be removed.')) return
+    try {
+      await deleteTeamMember(memberId)
+      setMessage('Team member deleted.')
+      await loadData()
+      setTimeout(() => setMessage(''), 3000)
+    } catch (err) {
+      setMessage('Error deleting team member')
+      console.error(err)
+    }
+  }
+
   if (isLoading) {
     return <div className="text-center py-8">Loading...</div>
   }
@@ -151,8 +190,59 @@ export default function AdminPanel() {
             <div className="space-y-2">
               {teamMembers.map((member) => (
                 <div key={member.id} className="p-2 bg-gray-50 rounded">
-                  <p className="font-medium text-gray-900">{member.name}</p>
-                  <p className="text-xs text-gray-600">{member.email}</p>
+                  {editingMember?.id === member.id ? (
+                    <div className="space-y-2">
+                      <input
+                        type="text"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Name"
+                      />
+                      <input
+                        type="email"
+                        value={editEmail}
+                        onChange={(e) => setEditEmail(e.target.value)}
+                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Email"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleSaveEdit}
+                          className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-medium"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setEditingMember(null)}
+                          className="px-3 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300 font-medium"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-gray-900">{member.name}</p>
+                        <p className="text-xs text-gray-600">{member.email}</p>
+                      </div>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => handleEditTeamMember(member)}
+                          className="px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded font-medium"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteTeamMember(member.id)}
+                          className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded font-medium"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
