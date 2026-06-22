@@ -2,7 +2,7 @@
 CREATE TABLE public.team_members (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name VARCHAR(255) NOT NULL,
-  email VARCHAR(255) UNIQUE NOT NULL,
+  team VARCHAR(255) NOT NULL DEFAULT '',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -47,11 +47,11 @@ VALUES ('2026-06-22', '2026-06-28')
 ON CONFLICT DO NOTHING;
 
 -- Sample team members
-INSERT INTO public.team_members (name, email)
+INSERT INTO public.team_members (name, team)
 VALUES 
-  ('John Doe', 'john@company.com'),
-  ('Jane Smith', 'jane@company.com'),
-  ('Mike Johnson', 'mike@company.com')
+  ('John Doe', 'Engineering'),
+  ('Jane Smith', 'Design'),
+  ('Mike Johnson', 'Engineering')
 ON CONFLICT DO NOTHING;
 
 -- Enable RLS
@@ -63,8 +63,20 @@ ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Enable read access for all users" ON public.team_members
   FOR SELECT USING (true);
 
+CREATE POLICY "Enable insert for all users" ON public.team_members
+  FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Enable update for all users" ON public.team_members
+  FOR UPDATE USING (true);
+
+CREATE POLICY "Enable delete for all users" ON public.team_members
+  FOR DELETE USING (true);
+
 CREATE POLICY "Enable read access for all users" ON public.weeks
   FOR SELECT USING (true);
+
+CREATE POLICY "Enable insert for all users" ON public.weeks
+  FOR INSERT WITH CHECK (true);
 
 CREATE POLICY "Enable read access for all users" ON public.tasks
   FOR SELECT USING (true);
