@@ -83,7 +83,14 @@ export default function Dashboard() {
   const goToCurrentWeek = () => setCurrentWeekStart(todayWeekStart)
 
   const isThisWeek = currentWeekStart === todayWeekStart
-  const isNextWeek = todayWeekStart && currentWeekStart > todayWeekStart
+  const adjacentNextWeekStart = todayWeekStart
+    ? format(addWeeks(parseISO(todayWeekStart), 1), 'yyyy-MM-dd')
+    : null
+  const adjacentPrevWeekStart = todayWeekStart
+    ? format(subWeeks(parseISO(todayWeekStart), 1), 'yyyy-MM-dd')
+    : null
+  const isNextWeek = currentWeekStart === adjacentNextWeekStart
+  const isPastWeek = currentWeekStart === adjacentPrevWeekStart
 
   const weekLabel = week ? getWeekLabelShort(week.week_start_date) : ''
 
@@ -106,15 +113,15 @@ export default function Dashboard() {
         <h1 className="text-3xl font-bold text-gray-900 mb-4">Weekly Targets</h1>
 
         {/* Week navigation */}
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center justify-between gap-3">
           <button
             onClick={goToPrevWeek}
-            className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 font-medium"
+            className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 font-medium flex-shrink-0"
           >
             ← Previous
           </button>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-1 items-center justify-center gap-2 flex-wrap">
             <span className="text-base font-medium text-gray-700">{weekLabel}</span>
             {isThisWeek && (
               <span className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full font-medium">
@@ -126,28 +133,27 @@ export default function Dashboard() {
                 Next Week
               </span>
             )}
-            {!isThisWeek && !isNextWeek && (
+            {!isThisWeek && !isNextWeek && isPastWeek && (
               <span className="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full font-medium">
                 Past Week
               </span>
+            )}
+            {!isThisWeek && (
+              <button
+                onClick={goToCurrentWeek}
+                className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
+              >
+                Back to This Week
+              </button>
             )}
           </div>
 
           <button
             onClick={goToNextWeek}
-            className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 font-medium"
+            className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md hover:bg-gray-50 font-medium flex-shrink-0"
           >
             Next →
           </button>
-
-          {!isThisWeek && (
-            <button
-              onClick={goToCurrentWeek}
-              className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
-            >
-              Back to This Week
-            </button>
-          )}
         </div>
       </div>
 
