@@ -188,7 +188,7 @@ export default function Task({
                 />
                 <input
                   type="number"
-                  step="0.5"
+                  step="any"
                   value={editedHours}
                   onChange={(e) => setEditedHours(e.target.value)}
                   placeholder="h"
