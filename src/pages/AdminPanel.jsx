@@ -6,6 +6,7 @@ import {
   deleteTeamMember,
   getAllWeeks,
   getWeeklyTasks,
+  getCurrentWeek,
 } from '../lib/supabase'
 
 export default function AdminPanel() {
@@ -35,7 +36,13 @@ export default function AdminPanel() {
       const [members, allWeeks] = await Promise.all([getTeamMembers(), getAllWeeks()])
       setTeamMembers(members)
       setWeeks(allWeeks)
-      if (allWeeks.length > 0) setSelectedWeekId(allWeeks[0].id)
+      
+      // Set current week as default
+      if (allWeeks.length > 0) {
+        const currentWeek = await getCurrentWeek()
+        const weekToSelect = allWeeks.find(w => w.id === currentWeek.id) || allWeeks[0]
+        setSelectedWeekId(weekToSelect.id)
+      }
     } catch (err) {
       console.error('Error loading data:', err)
       setMessage('Error loading data')
@@ -232,7 +239,7 @@ export default function AdminPanel() {
 
         {/* Total Hours by Week */}
         <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Total Hours by Member</h2>
+          <h2 className="text-xl font-bold text-gray-900 mb-4">Total Estimated Hours by Members</h2>
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">Select Week</label>
             <select
@@ -257,7 +264,7 @@ export default function AdminPanel() {
                 </div>
                 <div className="text-right">
                   <span className="text-lg font-bold text-blue-600">
-                    {(hoursByMember[member.id] || 0).toFixed(1)}h
+                    {(hoursByMember[member.id] || 0).toFixed(1)}h <span className="text-xs font-normal text-gray-500">est.</span>
                   </span>
                 </div>
               </div>
