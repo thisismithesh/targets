@@ -121,6 +121,8 @@ export default function Task({
         completed_date: newStatus === 'completed' ? new Date().toISOString().split('T')[0] : null
       })
       .eq('id', task.id)
+
+    if (onTaskUpdate) onTaskUpdate()
   }
 
   const saveHoldReason = async () => {
