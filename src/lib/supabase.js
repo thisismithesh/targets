@@ -34,11 +34,12 @@ export async function getSubtasks(taskId) {
   return data
 }
 
-// Helper function to get team members
+// Helper function to get team members (ordered by position, then name)
 export async function getTeamMembers() {
   const { data, error } = await supabase
     .from('team_members')
     .select('*')
+    .order('position', { ascending: true, nullsFirst: false })
     .order('name', { ascending: true })
 
   if (error) throw error
@@ -201,6 +202,20 @@ export async function deleteTeamMember(memberId) {
     .from('team_members')
     .delete()
     .eq('id', memberId)
+
+  if (error) throw error
+}
+
+// Helper function to save team member positions
+export async function saveTeamMemberPositions(members) {
+  const updates = members.map((member, index) => ({
+    id: member.id,
+    position: index
+  }))
+  
+  const { error } = await supabase
+    .from('team_members')
+    .upsert(updates, { onConflict: 'id' })
 
   if (error) throw error
 }
