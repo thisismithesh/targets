@@ -17,7 +17,7 @@ export default function Task({
   commentCount = 0,
 }) {
   const [showSubtasks, setShowSubtasks] = useState(true)
-  const [isEditing, setIsEditing] = useState(false)
+  const [isEditing, setIsEditing] = useState(!task.task_name)
   const [editedName, setEditedName] = useState(task.task_name)
   const [editedDeadline, setEditedDeadline] = useState(task.deadline || '')
   const [editedHours, setEditedHours] = useState(task.estimated_hours || '')
