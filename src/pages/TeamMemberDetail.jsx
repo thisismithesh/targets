@@ -235,16 +235,23 @@ export default function TeamMemberDetail() {
     const [moved] = reordered.splice(index, 1)
     reordered.splice(targetIndex, 0, moved)
 
-    // Apply new sequential positions to local state immediately
-    const byId = new Map(reordered.map((t, i) => [t.id, { ...t, position: i }]))
-    setTasks((prev) => prev.map((t) => byId.get(t.id) || t))
+    // Update the main tasks array
+    const updatedTasks = tasks.map(t => {
+      const reorderedTask = reordered.find(rt => rt.id === t.id)
+      if (reorderedTask) {
+        return { ...reorderedTask, position: reordered.indexOf(reorderedTask) }
+      }
+      return t
+    })
+    
+    setTasks(updatedTasks)
 
-    // Persist new positions
+    // Persist new positions to database
     try {
       await Promise.all(reordered.map((t, i) => updateTask(t.id, { position: i })))
     } catch (err) {
-      console.error('Error saving order:', err)
-      handleTaskUpdate()
+      console.error('Error saving task order:', err)
+      handleTaskUpdate() // resync on failure
     }
   }
 
