@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { supabase, getTaskComments, addTaskComment, deleteTaskComment } from '../lib/supabase'
-import { formatDate, getStatusColor, getStatusLabel, isOverdue, isDueToday } from '../lib/utils'
+import { formatDate, getStatusColor, getStatusLabel, isOverdue, isDueToday, openDatePicker } from '../lib/utils'
 
 export default function Task({ 
   task, 
@@ -233,6 +233,7 @@ export default function Task({
                   type="date"
                   value={editedDeadline}
                   onChange={(e) => setEditedDeadline(e.target.value)}
+                  onClick={openDatePicker}
                   className="flex-[1.5] min-w-0 px-1 py-1 border border-gray-300 rounded text-xs"
                 />
                 <input
