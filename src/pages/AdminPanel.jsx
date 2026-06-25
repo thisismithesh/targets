@@ -8,6 +8,7 @@ import {
   getWeeklyTasks,
   getCurrentWeek,
   getStarCounts,
+  saveTeamMemberPositions,
 } from '../lib/supabase'
 import { getWeekLabelShort } from '../lib/utils'
 import Stars from '../components/Stars'
@@ -159,13 +160,21 @@ export default function AdminPanel() {
     }
   }
 
-  const handleMoveMember = (currentIndex, direction) => {
+  const handleMoveMember = async (currentIndex, direction) => {
     const newMembers = [...teamMembers]
     const swapIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
     
     if (swapIndex >= 0 && swapIndex < newMembers.length) {
       [newMembers[currentIndex], newMembers[swapIndex]] = [newMembers[swapIndex], newMembers[currentIndex]]
       setTeamMembers(newMembers)
+      
+      // Save the new order to the database
+      try {
+        await saveTeamMemberPositions(newMembers)
+      } catch (err) {
+        console.error('Error saving member order:', err)
+        showMessage('Error saving member order')
+      }
     }
   }
 
