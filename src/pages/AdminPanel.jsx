@@ -18,6 +18,7 @@ export default function AdminPanel() {
   const [weeks, setWeeks] = useState([])
   const [selectedWeekId, setSelectedWeekId] = useState('')
   const [currentWeekId, setCurrentWeekId] = useState('')
+  const [selectedTeamForHours, setSelectedTeamForHours] = useState(null)
   const [starCounts, setStarCounts] = useState({})
   const [hoursByMember, setHoursByMember] = useState({})
   const [isLoading, setIsLoading] = useState(true)
@@ -27,6 +28,7 @@ export default function AdminPanel() {
   const [editName, setEditName] = useState('')
   const [editTeam, setEditTeam] = useState('')
   const [message, setMessage] = useState('')
+  const [teams, setTeams] = useState([])
 
   useEffect(() => {
     loadData()
@@ -34,7 +36,7 @@ export default function AdminPanel() {
 
   useEffect(() => {
     if (selectedWeekId) loadHours()
-  }, [selectedWeekId, teamMembers])
+  }, [selectedWeekId, teamMembers, selectedTeamForHours])
 
   const loadData = async () => {
     try {
@@ -42,6 +44,15 @@ export default function AdminPanel() {
       const [members, allWeeks] = await Promise.all([getTeamMembers(), getAllWeeks()])
       setTeamMembers(members)
       setWeeks(allWeeks)
+
+      // Extract unique teams and sort
+      const uniqueTeams = [...new Set(members.map(m => m.team))].sort()
+      setTeams(uniqueTeams)
+
+      // Set first team as selected for hours view if not already set
+      if (!selectedTeamForHours && uniqueTeams.length > 0) {
+        setSelectedTeamForHours(uniqueTeams[0])
+      }
 
       try {
         setStarCounts(await getStarCounts())
@@ -87,7 +98,6 @@ export default function AdminPanel() {
   }
 
   // Week navigation for the hours section.
-  // weeks are ordered newest-first, so a lower index = newer week.
   const selectedWeekIndex = weeks.findIndex((w) => w.id === selectedWeekId)
   const selectedWeek = weeks[selectedWeekIndex]
   const goToOlderWeek = () => {
@@ -149,6 +159,28 @@ export default function AdminPanel() {
     }
   }
 
+  const handleMoveMember = (currentIndex, direction) => {
+    const newMembers = [...teamMembers]
+    const swapIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
+    
+    if (swapIndex >= 0 && swapIndex < newMembers.length) {
+      [newMembers[currentIndex], newMembers[swapIndex]] = [newMembers[swapIndex], newMembers[currentIndex]]
+      setTeamMembers(newMembers)
+    }
+  }
+
+  // Group members by team
+  const membersByTeam = {}
+  teamMembers.forEach((member) => {
+    if (!membersByTeam[member.team]) membersByTeam[member.team] = []
+    membersByTeam[member.team].push(member)
+  })
+
+  // Filter members for hours section by selected team
+  const filteredMembersForHours = selectedTeamForHours
+    ? teamMembers.filter(m => m.team === selectedTeamForHours)
+    : teamMembers
+
   if (isLoading) return <div className="text-center py-8">Loading...</div>
 
   return (
@@ -196,65 +228,102 @@ export default function AdminPanel() {
 
           <div className="pt-4 border-t border-gray-200">
             <h3 className="text-sm font-medium text-gray-900 mb-3">Team Members ({teamMembers.length})</h3>
-            <div className="space-y-2">
-              {teamMembers.map((member) => (
-                <div key={member.id} className="p-3 bg-gray-50 rounded">
-                  {editingMember?.id === member.id ? (
-                    <div className="space-y-2">
-                      <input
-                        type="text"
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Name"
-                      />
-                      <input
-                        type="text"
-                        value={editTeam}
-                        onChange={(e) => setEditTeam(e.target.value)}
-                        className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Team"
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          onClick={handleSaveEdit}
-                          className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-medium"
-                        >
-                          Save
-                        </button>
-                        <button
-                          onClick={() => setEditingMember(null)}
-                          className="px-3 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300 font-medium"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium text-gray-900 flex items-center gap-1.5">
-                          <span>{member.name}</span>
-                          <Stars count={starCounts[member.id] || 0} />
-                        </p>
-                        <p className="text-xs text-gray-500">{member.team}</p>
-                      </div>
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => handleEditTeamMember(member)}
-                          className="px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded font-medium"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDeleteTeamMember(member.id)}
-                          className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded font-medium"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  )}
+            <div className="space-y-4">
+              {Object.entries(membersByTeam).map(([team, members]) => (
+                <div key={team}>
+                  <h4 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">{team}</h4>
+                  <div className="space-y-2">
+                    {members.map((member, memberIndex) => {
+                      const memberIndexInAllList = teamMembers.findIndex(m => m.id === member.id)
+                      const teamStartIndex = teamMembers.findIndex(m => m.team === team)
+                      const isFirstInTeam = memberIndex === 0
+                      const isLastInTeam = memberIndex === members.length - 1
+
+                      return (
+                        <div key={member.id} className="p-3 bg-gray-50 rounded">
+                          {editingMember?.id === member.id ? (
+                            <div className="space-y-2">
+                              <input
+                                type="text"
+                                value={editName}
+                                onChange={(e) => setEditName(e.target.value)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="Name"
+                              />
+                              <input
+                                type="text"
+                                value={editTeam}
+                                onChange={(e) => setEditTeam(e.target.value)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="Team"
+                              />
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={handleSaveEdit}
+                                  className="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-medium"
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  onClick={() => setEditingMember(null)}
+                                  className="px-3 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300 font-medium"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <div className="flex flex-col -my-1">
+                                  <button
+                                    onClick={() => handleMoveMember(memberIndexInAllList, 'up')}
+                                    disabled={memberIndexInAllList === 0}
+                                    className={`px-1.5 leading-none text-xs ${
+                                      memberIndexInAllList > 0 ? 'text-gray-400 hover:text-gray-700' : 'text-gray-200 cursor-default'
+                                    }`}
+                                    title="Move up"
+                                  >
+                                    ▲
+                                  </button>
+                                  <button
+                                    onClick={() => handleMoveMember(memberIndexInAllList, 'down')}
+                                    disabled={memberIndexInAllList === teamMembers.length - 1}
+                                    className={`px-1.5 leading-none text-xs ${
+                                      memberIndexInAllList < teamMembers.length - 1 ? 'text-gray-400 hover:text-gray-700' : 'text-gray-200 cursor-default'
+                                    }`}
+                                    title="Move down"
+                                  >
+                                    ▼
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="flex-1">
+                                <p className="font-medium text-gray-900 flex items-center gap-1.5">
+                                  <span>{member.name}</span>
+                                  <Stars count={starCounts[member.id] || 0} />
+                                </p>
+                              </div>
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={() => handleEditTeamMember(member)}
+                                  className="px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded font-medium"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteTeamMember(member.id)}
+                                  className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded font-medium"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
               ))}
               {teamMembers.length === 0 && (
@@ -267,6 +336,26 @@ export default function AdminPanel() {
         {/* Total Hours by Week */}
         <div className="bg-white rounded-lg border border-gray-200 p-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4">Total Estimated Hours by Members</h2>
+
+          {/* Team filter pills for hours section */}
+          <div className="mb-4">
+            <div className="flex flex-wrap gap-2">
+              {teams.map((team) => (
+                <button
+                  key={team}
+                  onClick={() => setSelectedTeamForHours(team)}
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                    selectedTeamForHours === team
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  {team}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="mb-4">
             <div className="flex items-center justify-between gap-3">
               <button
@@ -281,12 +370,17 @@ export default function AdminPanel() {
                 <span className="text-base font-medium text-gray-700">
                   {selectedWeek ? getWeekLabelShort(selectedWeek.week_start_date) : ''}
                 </span>
+                {selectedWeekId === currentWeekId && (
+                  <span className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full font-medium">
+                    Current Week
+                  </span>
+                )}
                 {currentWeekId && selectedWeekId !== currentWeekId && (
                   <button
                     onClick={() => setSelectedWeekId(currentWeekId)}
                     className="px-2 py-0.5 text-xs text-blue-600 hover:text-blue-700 font-medium underline"
                   >
-                    Back to This Week
+                    Back to this week
                   </button>
                 )}
               </div>
@@ -302,14 +396,13 @@ export default function AdminPanel() {
           </div>
 
           <div className="space-y-2">
-            {teamMembers.map((member) => (
+            {filteredMembersForHours.map((member) => (
               <div key={member.id} className="flex items-center justify-between p-3 bg-gray-50 rounded">
                 <div>
                   <p className="font-medium text-gray-900 text-sm flex items-center gap-1.5">
                     <span>{member.name}</span>
                     <Stars count={starCounts[member.id] || 0} />
                   </p>
-                  <p className="text-xs text-gray-500">{member.team}</p>
                 </div>
                 <div className="text-right">
                   <span className="text-lg font-bold text-blue-600">
@@ -318,8 +411,8 @@ export default function AdminPanel() {
                 </div>
               </div>
             ))}
-            {teamMembers.length === 0 && (
-              <p className="text-sm text-gray-500 text-center py-4">No team members yet.</p>
+            {filteredMembersForHours.length === 0 && (
+              <p className="text-sm text-gray-500 text-center py-4">No team members in {selectedTeamForHours}.</p>
             )}
           </div>
         </div>
