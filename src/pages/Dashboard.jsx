@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { supabase, getTeamMembers, getCurrentWeek, getOrCreateWeek, getStarCounts } from '../lib/supabase'
-import TeamMemberCard from '../components/TeamMemberCard'
+import { supabase, getTeamMembers, getCurrentWeek, getOrCreateWeek } from '../lib/supabase'
+import TeamMemberRow from '../components/TeamMemberRow'
 import { getWeekLabelShort } from '../lib/utils'
 import { addWeeks, subWeeks, startOfWeek, format, parseISO } from 'date-fns'
 
@@ -15,7 +15,6 @@ export default function Dashboard() {
   const [week, setWeek] = useState(null)
   const [teamMembers, setTeamMembers] = useState([])
   const [tasksByMember, setTasksByMember] = useState({})
-  const [starCounts, setStarCounts] = useState({})
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -61,12 +60,6 @@ export default function Dashboard() {
         })
       }
       setTasksByMember(grouped)
-
-      try {
-        setStarCounts(await getStarCounts())
-      } catch (e) {
-        console.error('Error loading stars:', e)
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data')
       console.error('Error loading data:', err)
@@ -105,9 +98,12 @@ export default function Dashboard() {
     return (
       <div className="space-y-4">
         <div className="h-8 bg-gray-200 rounded w-1/3 animate-pulse"></div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-64 bg-gray-200 rounded animate-pulse"></div>
+            <div key={i} className="flex items-center justify-between py-3 border-b border-gray-100">
+              <div className="h-4 bg-gray-200 rounded w-32 animate-pulse"></div>
+              <div className="h-1.5 bg-gray-200 rounded w-24 animate-pulse"></div>
+            </div>
           ))}
         </div>
       </div>
@@ -185,15 +181,13 @@ export default function Dashboard() {
           </a>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div>
           {teamMembers.map((member) => (
-            <TeamMemberCard
+            <TeamMemberRow
               key={member.id}
               teamMember={member}
               weekId={week?.id}
               tasks={tasksByMember[member.id] || []}
-              onTaskUpdate={handleTaskUpdate}
-              starCount={starCounts[member.id] || 0}
             />
           ))}
         </div>
