@@ -13,12 +13,15 @@ export default function Dashboard() {
   const [currentWeekStart, setCurrentWeekStart] = useState(null) // 'YYYY-MM-DD' of Monday
   const [todayWeekStart, setTodayWeekStart] = useState(null)    // always today's week
   const [week, setWeek] = useState(null)
+  const [allTeamMembers, setAllTeamMembers] = useState([])
+  const [selectedTeam, setSelectedTeam] = useState(null)
   const [teamMembers, setTeamMembers] = useState([])
   const [tasksByMember, setTasksByMember] = useState({})
   const [starCounts, setStarCounts] = useState({})
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [teams, setTeams] = useState([])
 
   // On first load, determine today's week
   useEffect(() => {
@@ -29,7 +32,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (currentWeekStart) loadData()
-  }, [currentWeekStart, refreshKey])
+  }, [currentWeekStart, refreshKey, selectedTeam])
 
   const loadData = async () => {
     try {
@@ -41,7 +44,23 @@ export default function Dashboard() {
         getTeamMembers(),
       ])
       setWeek(w)
-      setTeamMembers(members)
+      setAllTeamMembers(members)
+
+      // Extract unique teams and sort
+      const uniqueTeams = [...new Set(members.map(m => m.team))].sort()
+      setTeams(uniqueTeams)
+
+      // Set first team as selected if not already set
+      if (!selectedTeam && uniqueTeams.length > 0) {
+        setSelectedTeam(uniqueTeams[0])
+      }
+
+      // Filter members by selected team
+      const filtered = selectedTeam 
+        ? members.filter(m => m.team === selectedTeam)
+        : members
+
+      setTeamMembers(filtered)
 
       const { data: tasks, error: taskError } = await supabase
         .from('tasks')
@@ -52,7 +71,7 @@ export default function Dashboard() {
       if (taskError) throw taskError
 
       const grouped = {}
-      members.forEach((member) => { grouped[member.id] = [] })
+      filtered.forEach((member) => { grouped[member.id] = [] })
       if (tasks) {
         tasks.forEach((task) => {
           if (grouped[task.team_member_id]) {
@@ -90,14 +109,6 @@ export default function Dashboard() {
   const goToCurrentWeek = () => setCurrentWeekStart(todayWeekStart)
 
   const isThisWeek = currentWeekStart === todayWeekStart
-  const adjacentNextWeekStart = todayWeekStart
-    ? format(addWeeks(parseISO(todayWeekStart), 1), 'yyyy-MM-dd')
-    : null
-  const adjacentPrevWeekStart = todayWeekStart
-    ? format(subWeeks(parseISO(todayWeekStart), 1), 'yyyy-MM-dd')
-    : null
-  const isNextWeek = currentWeekStart === adjacentNextWeekStart
-  const isPastWeek = currentWeekStart === adjacentPrevWeekStart
 
   const weekLabel = week ? getWeekLabelShort(week.week_start_date) : ''
 
@@ -119,6 +130,25 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-[600px] mx-auto">
+      {/* Team filter pills */}
+      <div className="mb-6">
+        <div className="flex flex-wrap gap-2">
+          {teams.map((team) => (
+            <button
+              key={team}
+              onClick={() => setSelectedTeam(team)}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                selectedTeam === team
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              {team}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="mb-6">
         {/* Week navigation */}
         <div className="flex items-center justify-between gap-2">
@@ -136,22 +166,12 @@ export default function Dashboard() {
                 Current Week
               </span>
             )}
-            {isNextWeek && (
-              <span className="px-2 py-0.5 text-xs bg-purple-100 text-purple-700 rounded-full font-medium">
-                Next Week
-              </span>
-            )}
-            {!isThisWeek && !isNextWeek && isPastWeek && (
-              <span className="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full font-medium">
-                Past Week
-              </span>
-            )}
             {!isThisWeek && (
               <button
                 onClick={goToCurrentWeek}
-                className="px-2.5 py-1 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
+                className="px-2.5 py-1 text-xs text-blue-600 hover:text-blue-700 font-medium underline"
               >
-                Back to This Week
+                Back to this week
               </button>
             )}
           </div>
@@ -180,7 +200,7 @@ export default function Dashboard() {
 
       {teamMembers.length === 0 ? (
         <div className="text-center py-12">
-          <p className="text-gray-500 mb-4">No team members found.</p>
+          <p className="text-gray-500 mb-4">No team members found in {selectedTeam}.</p>
           <a href="/admin" className="text-blue-600 hover:text-blue-700 font-medium">
             Go to Admin to add team members
           </a>
