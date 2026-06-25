@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
+import Stars from './Stars'
 
-export default function TeamMemberRow({ teamMember, weekId, tasks = [] }) {
+export default function TeamMemberRow({ teamMember, weekId, tasks = [], starCount = 0 }) {
   // Exclude on-hold tasks entirely from the progress count
   const relevantTasks = tasks.filter((t) => t.status !== 'on-hold')
   const totalCount = relevantTasks.length
@@ -12,7 +13,10 @@ export default function TeamMemberRow({ teamMember, weekId, tasks = [] }) {
       to={`/team/${teamMember.id}/week/${weekId}`}
       className="group flex items-center justify-between gap-4 py-3 px-1 border-b border-gray-100 last:border-b-0 hover:bg-gray-50 transition-colors"
     >
-      <span className="text-base font-medium text-gray-900 truncate group-hover:underline">{teamMember.name}</span>
+      <span className="flex items-center gap-2 min-w-0">
+        <span className="text-base font-medium text-gray-900 truncate group-hover:underline">{teamMember.name}</span>
+        <Stars count={starCount} />
+      </span>
 
       <div className="flex items-center gap-2.5 flex-shrink-0">
         <span className="text-sm text-gray-500 tabular-nums">
