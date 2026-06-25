@@ -18,7 +18,7 @@ body {
 
 /* Task Card Styles - Compact */
 .task-card {
-  @apply py-2 border-b border-gray-100 transition-colors;
+  @apply py-1 border-b border-gray-100 transition-colors;
 }
 
 /* Status is conveyed via the task name text color (see Task.jsx).
