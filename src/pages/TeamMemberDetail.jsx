@@ -4,7 +4,7 @@ import { supabase, getSubtasks, getTeamMemberById, getWeekById, createTask, upda
 import Task from '../components/Task'
 import CleanSweepPopup from '../components/CleanSweepPopup'
 import Stars from '../components/Stars'
-import { getWeekLabelShort } from '../lib/utils'
+import { getWeekLabelShort, openDatePicker } from '../lib/utils'
 
 export default function TeamMemberDetail() {
   const { memberId, weekId } = useParams()
@@ -405,6 +405,7 @@ export default function TeamMemberDetail() {
                       type="date"
                       value={newTask.deadline}
                       onChange={(e) => setNewTask({ ...newTask, deadline: e.target.value })}
+                      onClick={openDatePicker}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
@@ -550,6 +551,7 @@ export default function TeamMemberDetail() {
                           type="date"
                           value={inlineTask.deadline}
                           onChange={(e) => setInlineTask({ ...inlineTask, deadline: e.target.value })}
+                          onClick={openDatePicker}
                           className="flex-[1.5] min-w-0 px-1 py-1 border border-gray-300 rounded text-xs"
                         />
                         <input
