@@ -342,7 +342,10 @@ export default function TeamMemberDetail() {
                   ← Back to Dashboard
                 </Link>
               </div>
-              <h1 className="text-3xl font-bold text-gray-900">{teamMember.name}</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-3xl font-bold text-gray-900">{teamMember.name}</h1>
+                <Stars count={starCount} />
+              </div>
               <p className="text-lg text-gray-600">{getWeekLabelShort(week.week_start_date)}</p>
             </div>
             <button
@@ -362,7 +365,6 @@ export default function TeamMemberDetail() {
               )}
               <form onSubmit={handleAddProject} className="space-y-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Project Name *</label>
                   <input
                     type="text"
                     value={newProjectName}
