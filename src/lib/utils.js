@@ -60,6 +60,20 @@ export function getStatusColor(status, carryForwardWeeks = 0) {
   return 'gray'
 }
 
+// Clicking anywhere on a date input (not just the tiny calendar icon)
+// opens the native date picker. Falls back to default behavior in
+// browsers that don't support showPicker() (e.g. Firefox, Safari).
+export function openDatePicker(e) {
+  const input = e.currentTarget
+  if (input && typeof input.showPicker === 'function') {
+    try {
+      input.showPicker()
+    } catch {
+      // Ignore — browser declined (e.g. input disabled), default click still works
+    }
+  }
+}
+
 export function getStatusLabel(status, carryForwardWeeks = 0) {
   if (status === 'on-hold') return 'On Hold'
   if (status === 'carry-forward' || carryForwardWeeks > 0) return `Carried Forward (${carryForwardWeeks}w)`
