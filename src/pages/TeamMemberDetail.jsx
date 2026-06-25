@@ -30,14 +30,9 @@ export default function TeamMemberDetail() {
     }
   }
 
-  // Add task form state
-  const [showAddForm, setShowAddForm] = useState(false)
-  const [newTask, setNewTask] = useState({
-    task_name: '',
-    heading: '',
-    deadline: '',
-    estimated_hours: '',
-  })
+  // Add project form state
+  const [showAddProjectForm, setShowAddProjectForm] = useState(false)
+  const [newProjectName, setNewProjectName] = useState('')
   const [addMessage, setAddMessage] = useState('')
 
   // Inline add-task state (used by the per-heading "+ Add" buttons)
@@ -47,7 +42,6 @@ export default function TeamMemberDetail() {
     deadline: '',
     estimated_hours: '',
   })
-
 
   useEffect(() => {
     loadData()
@@ -154,24 +148,23 @@ export default function TeamMemberDetail() {
     }
   }
 
-  const handleAddTask = async (e) => {
+  // Add a new project (heading)
+  const handleAddProject = async (e) => {
     e.preventDefault()
-    if (!newTask.task_name.trim()) {
-      setAddMessage('Please enter a task name')
+    if (!newProjectName.trim()) {
+      setAddMessage('Please enter a project name')
       return
     }
-    if (!newTask.heading.trim()) {
-      setAddMessage('Please enter a project/category')
-      return
-    }
+
     try {
+      // Create a dummy task to establish the heading
       const created = await createTask({
         team_member_id: memberId,
         week_id: weekId,
-        task_name: newTask.task_name,
-        heading: newTask.heading.trim(),
-        deadline: newTask.deadline || null,
-        estimated_hours: newTask.estimated_hours ? parseFloat(newTask.estimated_hours) : null,
+        task_name: '', // Empty for now - this is just to create the heading
+        heading: newProjectName.trim(),
+        deadline: null,
+        estimated_hours: null,
         status: 'pending',
         position: nextPosition(),
       })
@@ -179,11 +172,11 @@ export default function TeamMemberDetail() {
         setTasks((prev) => [...prev, created])
         setSubtaskMap((prev) => ({ ...prev, [created.id]: [] }))
       }
-      setNewTask({ task_name: '', heading: '', deadline: '', estimated_hours: '' })
+      setNewProjectName('')
       setAddMessage('')
-      setShowAddForm(false)
+      setShowAddProjectForm(false)
     } catch (err) {
-      setAddMessage('Error adding task')
+      setAddMessage('Error adding project')
       console.error(err)
     }
   }
@@ -266,173 +259,114 @@ export default function TeamMemberDetail() {
     }
   }
 
-  // Move an entire heading group up or down, then persist heading order.
-  const moveHeading = async (orderedHeadings, index, direction) => {
-    const targetIndex = direction === 'up' ? index - 1 : index + 1
-    if (targetIndex < 0 || targetIndex >= orderedHeadings.length) return
+  // Group tasks by heading, sorted by heading order
+  const tasksByHeading = {}
+  const allHeadings = new Set()
+  tasks.forEach((t) => {
+    allHeadings.add(t.heading)
+    if (!tasksByHeading[t.heading]) tasksByHeading[t.heading] = []
+    tasksByHeading[t.heading].push(t)
+  })
 
-    const reordered = [...orderedHeadings]
+  // Sort headings: use saved order if available, else fall back to alphabetical
+  const orderedHeadings = Array.from(allHeadings).sort((a, b) => {
+    const orderA = headingOrders[a] ?? Infinity
+    const orderB = headingOrders[b] ?? Infinity
+    if (orderA !== Infinity || orderB !== Infinity) return orderA - orderB
+    return a.localeCompare(b)
+  })
+
+  // Move a heading section up or down
+  const moveHeading = async (headings, index, direction) => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1
+    if (targetIndex < 0 || targetIndex >= headings.length) return
+
+    const reordered = [...headings]
     const [moved] = reordered.splice(index, 1)
     reordered.splice(targetIndex, 0, moved)
 
-    // Apply locally
-    const orderMap = {}
-    reordered.forEach((h, i) => { orderMap[h] = i })
-    setHeadingOrders(orderMap)
-
-    // Persist
+    // Persist new order
     try {
-      await saveHeadingOrder(memberId, weekId, reordered)
+      await Promise.all(reordered.map((h, i) => saveHeadingOrder(memberId, weekId, h, i)))
     } catch (err) {
       console.error('Error saving heading order:', err)
-      handleTaskUpdate()
     }
   }
 
-  // Group tasks by heading, ordered within each group by position then created_at
-  const tasksByHeading = {}
-  tasks.forEach((task) => {
-    if (!tasksByHeading[task.heading]) tasksByHeading[task.heading] = []
-    tasksByHeading[task.heading].push(task)
-  })
-  Object.keys(tasksByHeading).forEach((heading) => {
-    tasksByHeading[heading].sort((a, b) => {
-      const pa = a.position ?? 0
-      const pb = b.position ?? 0
-      if (pa !== pb) return pa - pb
-      return new Date(a.created_at) - new Date(b.created_at)
-    })
-  })
-
-  // Earliest task creation time per heading (for default ascending order)
-  const headingCreatedAt = {}
-  Object.keys(tasksByHeading).forEach((heading) => {
-    headingCreatedAt[heading] = tasksByHeading[heading].reduce((min, t) => {
-      const ts = new Date(t.created_at).getTime()
-      return ts < min ? ts : min
-    }, Infinity)
-  })
-
-  // Ordered list of headings: use saved heading order if present,
-  // otherwise fall back to ascending creation time.
-  const orderedHeadings = Object.keys(tasksByHeading).sort((a, b) => {
-    const oa = headingOrders[a]
-    const ob = headingOrders[b]
-    const hasA = oa !== undefined
-    const hasB = ob !== undefined
-    if (hasA && hasB) return oa - ob
-    if (hasA) return -1
-    if (hasB) return 1
-    return headingCreatedAt[a] - headingCreatedAt[b]
-  })
-
+  // Calculate totals
   const completedCount = tasks.filter((t) => t.status === 'completed').length
-  const onHoldCount = tasks.filter((t) => t.status === 'on-hold').length
   const pendingCount = tasks.filter((t) => t.status === 'pending').length
+  const onHoldCount = tasks.filter((t) => t.status === 'on-hold').length
 
-  if (isLoading) return <div className="text-center py-8">Loading...</div>
-
-  if (error) {
+  if (isLoading)
     return (
-      <div className="p-4 bg-red-50 border border-red-200 rounded text-red-800">
-        <p className="font-medium">Error loading data</p>
-        <p className="text-sm">{error}</p>
+      <div className="max-w-4xl mx-auto space-y-4">
+        <div className="h-8 bg-gray-200 rounded w-1/3 animate-pulse"></div>
+        <div className="h-4 bg-gray-200 rounded w-1/4 animate-pulse mt-2"></div>
       </div>
     )
-  }
 
   return (
-    <div>
-      {showSweep && <CleanSweepPopup onClose={() => setShowSweep(false)} />}
-      <Link to="/" className="text-blue-600 hover:text-blue-700 mb-6 inline-block">
-        ← Back to Dashboard
-      </Link>
+    <div className="max-w-4xl mx-auto">
+      <CleanSweepPopup show={showSweep} onClose={() => setShowSweep(false)} />
+
+      {error && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded text-red-800">
+          <p className="font-medium">Error loading data</p>
+          <p className="text-sm">{error}</p>
+        </div>
+      )}
 
       {teamMember && week && (
         <>
-          <div className="mb-6 flex items-start justify-between flex-wrap gap-4">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-1 flex items-center gap-2">
-                <span>{teamMember.name}</span>
-                <Stars count={starCount} />
-              </h1>
-              <p className="text-gray-500 text-sm mb-1">{teamMember.team}</p>
+              <div className="flex items-center gap-2 mb-1">
+                <Link to="/" className="text-blue-600 hover:text-blue-700 font-medium text-sm">
+                  ← Back to Dashboard
+                </Link>
+              </div>
+              <h1 className="text-3xl font-bold text-gray-900">{teamMember.name}</h1>
               <p className="text-lg text-gray-600">{getWeekLabelShort(week.week_start_date)}</p>
             </div>
             <button
-              onClick={() => setShowAddForm((v) => !v)}
+              onClick={() => setShowAddProjectForm((v) => !v)}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium text-sm"
             >
-              {showAddForm ? 'Cancel' : '+ Add Task'}
+              {showAddProjectForm ? 'Cancel' : '+ Add Project'}
             </button>
           </div>
 
-          {/* Add Task Form */}
-          {showAddForm && (
+          {/* Add Project Form */}
+          {showAddProjectForm && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-              <h3 className="text-base font-semibold text-gray-900 mb-3">New Task</h3>
+              <h3 className="text-base font-semibold text-gray-900 mb-3">New Project</h3>
               {addMessage && (
                 <p className="mb-3 text-sm text-red-600">{addMessage}</p>
               )}
-              <form onSubmit={handleAddTask} className="space-y-3">
-                <div className="space-y-3">
+              <form onSubmit={handleAddProject} className="space-y-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Task Name *</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Project Name *</label>
                   <input
                     type="text"
-                    value={newTask.task_name}
-                    onChange={(e) => setNewTask({ ...newTask, task_name: e.target.value })}
+                    value={newProjectName}
+                    onChange={(e) => setNewProjectName(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="e.g., Complete project report"
+                    placeholder="e.g., Backend Development"
                     autoFocus
                   />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Project/Category *</label>
-                    <input
-                      type="text"
-                      value={newTask.heading}
-                      onChange={(e) => setNewTask({ ...newTask, heading: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g., General"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Deadline</label>
-                    <input
-                      type="date"
-                      value={newTask.deadline}
-                      onChange={(e) => setNewTask({ ...newTask, deadline: e.target.value })}
-                      onClick={openDatePicker}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Est. Hours</label>
-                    <input
-                      type="number"
-                      step="any"
-                      min="0"
-                      value={newTask.estimated_hours}
-                      onChange={(e) => setNewTask({ ...newTask, estimated_hours: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g., 4.5"
-                    />
-                  </div>
-                </div>
                 </div>
                 <div className="flex gap-2 pt-1">
                   <button
                     type="submit"
                     className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 font-medium"
                   >
-                    Add Task
+                    Add Project
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setShowAddForm(false); setAddMessage('') }}
+                    onClick={() => { setShowAddProjectForm(false); setAddMessage('') }}
                     className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md text-sm hover:bg-gray-50 font-medium"
                   >
                     Cancel
@@ -463,12 +397,12 @@ export default function TeamMemberDetail() {
           {/* Task List */}
           {tasks.length === 0 ? (
             <div className="text-center py-12 bg-gray-50 rounded-lg border border-gray-200">
-              <p className="text-gray-500 mb-3">No tasks assigned for this week yet.</p>
+              <p className="text-gray-500 mb-3">No projects or tasks for this week yet.</p>
               <button
-                onClick={() => setShowAddForm(true)}
+                onClick={() => setShowAddProjectForm(true)}
                 className="text-blue-600 hover:text-blue-700 font-medium text-sm"
               >
-                + Add the first task
+                + Create the first project
               </button>
             </div>
           ) : (
@@ -505,16 +439,6 @@ export default function TeamMemberDetail() {
                         {heading}
                       </h2>
                     </div>
-                    <button
-                      onClick={() => {
-                        setInlineHeading(heading)
-                        setInlineTask({ task_name: '', deadline: '', estimated_hours: '' })
-                      }}
-                      className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-                      title={`Add task to ${heading}`}
-                    >
-                      + Add
-                    </button>
                   </div>
                   <div className="space-y-0">
                     {headingTasks.map((task, index) => (
@@ -576,6 +500,18 @@ export default function TeamMemberDetail() {
                           ✕
                         </button>
                       </div>
+                    )}
+                    {inlineHeading !== heading && (
+                      <button
+                        onClick={() => {
+                          setInlineHeading(heading)
+                          setInlineTask({ task_name: '', deadline: '', estimated_hours: '' })
+                        }}
+                        className="text-xs text-blue-600 hover:text-blue-700 font-medium mt-3 block"
+                        title={`Add task to ${heading}`}
+                      >
+                        + Add
+                      </button>
                     )}
                   </div>
                 </div>
