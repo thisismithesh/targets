@@ -286,14 +286,22 @@ export default function Task({
 
           {!isEditing && (
             <div className="flex items-center gap-1.5 flex-shrink-0">
-              <div className="text-xs text-gray-600 whitespace-nowrap mr-3">
-                {task.deadline && (
-                  <span>{formatDate(task.deadline)}</span>
-                )}
-                {task.deadline && task.estimated_hours && <span className="mx-1">•</span>}
-                {task.estimated_hours && (
-                  <span>{task.estimated_hours}h</span>
-                )}
+              <div className="flex items-center gap-1 text-sm text-gray-500 whitespace-nowrap mr-3">
+                <span
+                  onClick={() => setIsEditing(true)}
+                  className="cursor-pointer hover:underline"
+                  title="Click to edit"
+                >
+                  {task.deadline ? formatDate(task.deadline) : 'Add deadline'}
+                </span>
+                <span className="text-gray-300">•</span>
+                <span
+                  onClick={() => setIsEditing(true)}
+                  className="cursor-pointer hover:underline"
+                  title="Click to edit"
+                >
+                  {task.estimated_hours ? `${task.estimated_hours}h` : 'Add hours'}
+                </span>
               </div>
 
               {/* Hold dot (status toggle, no hover tooltip) */}
