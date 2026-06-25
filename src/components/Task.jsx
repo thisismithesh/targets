@@ -259,10 +259,10 @@ export default function Task({
               </div>
             ) : (
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-2 overflow-hidden">
                   <h3 
                     onClick={() => setIsEditing(true)}
-                    className={`text-sm font-medium cursor-pointer hover:underline truncate ${
+                    className={`text-sm font-medium cursor-pointer hover:underline truncate shrink ${
                       !task.task_name
                         ? 'text-gray-400'
                         : localCarryForwardWeeks > 0
