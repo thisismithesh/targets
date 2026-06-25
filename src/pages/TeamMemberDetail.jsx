@@ -228,45 +228,53 @@ export default function TeamMemberDetail() {
   // Move a task one slot up or down within its heading group, then persist.
   // `orderedGroup` is the currently displayed (sorted) list for the heading.
   const moveTask = async (orderedGroup, index, direction) => {
-    console.log('🔵 moveTask called!', { orderedGroup: orderedGroup.length, index, direction })
-    alert('Button clicked! moveTask was called!')
-    
-    const targetIndex = direction === 'up' ? index - 1 : index + 1
-    console.log('Target index:', targetIndex)
-    if (targetIndex < 0 || targetIndex >= orderedGroup.length) {
-      console.log('Out of bounds, returning')
+    // Prevent double execution
+    if (moveTask.isExecuting) {
+      console.log('moveTask already executing, skipping...')
       return
     }
-
-    // Reorder within the heading
-    const reordered = [...orderedGroup]
-    const [moved] = reordered.splice(index, 1)
-    reordered.splice(targetIndex, 0, moved)
-
-    // Find which heading we're working with
-    const heading = moved.heading
-
-    // Update the main tasks array - replace tasks in this heading with reordered versions
-    const updatedTasks = tasks.map(t => {
-      if (t.heading === heading) {
-        const reorderedTask = reordered.find(rt => rt.id === t.id)
-        if (reorderedTask) return reorderedTask
-      }
-      return t
-    })
+    moveTask.isExecuting = true
     
-    console.log('Setting tasks, updated tasks count:', updatedTasks.length)
-    setTasks(updatedTasks)
-
-    // Persist new positions - assign sequential positions to ALL tasks
-    // (This maintains correct global order across all headings)
     try {
+      console.log('🔵 moveTask called!', { orderedGroup: orderedGroup.length, index, direction })
+      
+      const targetIndex = direction === 'up' ? index - 1 : index + 1
+      console.log('Target index:', targetIndex)
+      if (targetIndex < 0 || targetIndex >= orderedGroup.length) {
+        console.log('Out of bounds, returning')
+        return
+      }
+
+      // Reorder within the heading
+      const reordered = [...orderedGroup]
+      const [moved] = reordered.splice(index, 1)
+      reordered.splice(targetIndex, 0, moved)
+
+      // Find which heading we're working with
+      const heading = moved.heading
+
+      // Update the main tasks array - replace tasks in this heading with reordered versions
+      const updatedTasks = tasks.map(t => {
+        if (t.heading === heading) {
+          const reorderedTask = reordered.find(rt => rt.id === t.id)
+          if (reorderedTask) return reorderedTask
+        }
+        return t
+      })
+      
+      console.log('Setting tasks, updated tasks count:', updatedTasks.length)
+      setTasks(updatedTasks)
+
+      // Persist new positions - assign sequential positions to ALL tasks
+      // (This maintains correct global order across all headings)
       console.log('Saving positions to database...')
       await Promise.all(updatedTasks.map((t, i) => updateTask(t.id, { position: i })))
       console.log('✅ Positions saved successfully!')
     } catch (err) {
       console.error('❌ Error saving task order:', err)
       handleTaskUpdate() // resync on failure
+    } finally {
+      moveTask.isExecuting = false
     }
   }
 
