@@ -263,7 +263,9 @@ export default function Task({
                   <h3 
                     onClick={() => setIsEditing(true)}
                     className={`text-sm font-medium cursor-pointer hover:underline truncate ${
-                      localCarryForwardWeeks > 0
+                      !task.task_name
+                        ? 'text-gray-400'
+                        : localCarryForwardWeeks > 0
                         ? `text-purple-600 ${localTaskStatus === 'completed' ? 'line-through' : ''}`
                         : localTaskStatus === 'completed'
                         ? 'line-through text-gray-500'
@@ -272,7 +274,7 @@ export default function Task({
                         : 'text-gray-900'
                     }`}
                   >
-                    {task.task_name}
+                    {task.task_name || 'Add name'}
                   </h3>
                   {overdue && localTaskStatus !== 'completed' && (
                     <span className="badge bg-red-100 text-red-800 text-xs flex-shrink-0">
