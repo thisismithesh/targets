@@ -231,24 +231,29 @@ export default function TeamMemberDetail() {
     const targetIndex = direction === 'up' ? index - 1 : index + 1
     if (targetIndex < 0 || targetIndex >= orderedGroup.length) return
 
+    // Reorder within the heading
     const reordered = [...orderedGroup]
     const [moved] = reordered.splice(index, 1)
     reordered.splice(targetIndex, 0, moved)
 
-    // Update the main tasks array
+    // Find which heading we're working with
+    const heading = moved.heading
+
+    // Update the main tasks array - replace tasks in this heading with reordered versions
     const updatedTasks = tasks.map(t => {
-      const reorderedTask = reordered.find(rt => rt.id === t.id)
-      if (reorderedTask) {
-        return { ...reorderedTask, position: reordered.indexOf(reorderedTask) }
+      if (t.heading === heading) {
+        const reorderedTask = reordered.find(rt => rt.id === t.id)
+        if (reorderedTask) return reorderedTask
       }
       return t
     })
     
     setTasks(updatedTasks)
 
-    // Persist new positions to database
+    // Persist new positions - assign sequential positions to ALL tasks
+    // (This maintains correct global order across all headings)
     try {
-      await Promise.all(reordered.map((t, i) => updateTask(t.id, { position: i })))
+      await Promise.all(updatedTasks.map((t, i) => updateTask(t.id, { position: i })))
     } catch (err) {
       console.error('Error saving task order:', err)
       handleTaskUpdate() // resync on failure
