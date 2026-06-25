@@ -65,10 +65,10 @@ function App() {
                   </button>
 
                   {showProfileMenu && (
-                    <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                    <div className="absolute right-0 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-48 whitespace-nowrap">
                       <div className="px-4 py-3 border-b border-gray-100">
                         <p className="text-xs text-gray-600">Signed in as</p>
-                        <p className="text-sm font-medium text-gray-900 break-words">{session.user.email}</p>
+                        <p className="text-sm font-medium text-gray-900">{session.user.email}</p>
                       </div>
                       <button
                         onClick={handleSignOut}
