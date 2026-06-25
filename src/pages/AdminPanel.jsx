@@ -171,9 +171,12 @@ export default function AdminPanel() {
       // Save the new order to the database
       try {
         await saveTeamMemberPositions(newMembers)
+        showMessage('Team member order saved!')
       } catch (err) {
         console.error('Error saving member order:', err)
-        showMessage('Error saving member order')
+        showMessage('Error: Make sure the "position" column exists in team_members table. Run the migration first.')
+        // Revert the change
+        setTeamMembers(teamMembers)
       }
     }
   }
