@@ -141,14 +141,20 @@ export async function createTask(taskData) {
 
 // Helper function to update a task
 export async function updateTask(taskId, updates) {
+  console.log(`🔄 Updating task ${taskId}:`, updates)
+  
   const { data, error } = await supabase
     .from('tasks')
     .update(updates)
     .eq('id', taskId)
-    .select()
 
-  if (error) throw error
-  return data?.[0]
+  if (error) {
+    console.error(`❌ Error updating task ${taskId}:`, error)
+    throw error
+  }
+  
+  console.log(`✅ Task ${taskId} updated successfully`)
+  return data
 }
 
 // Helper function to delete a task
