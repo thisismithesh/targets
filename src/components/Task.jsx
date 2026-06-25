@@ -127,6 +127,8 @@ export default function Task({
         on_hold_reason: newStatus === 'on-hold' ? holdReason || '' : null
       })
       .eq('id', task.id)
+
+    if (onTaskUpdate) onTaskUpdate()
   }
 
   const toggleCarryForward = async () => {
@@ -139,6 +141,8 @@ export default function Task({
         carry_forward_weeks: newWeeks
       })
       .eq('id', task.id)
+
+    if (onTaskUpdate) onTaskUpdate()
   }
 
   const toggleCompleted = async () => {
