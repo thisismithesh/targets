@@ -38,12 +38,19 @@ function App() {
             </div>
 
             <div className="flex items-center gap-6">
-              {session && (
+              {session ? (
                 <Link
                   to="/admin"
                   className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
                 >
                   Admin
+                </Link>
+              ) : (
+                <Link
+                  to="/admin"
+                  className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+                >
+                  Login
                 </Link>
               )}
 
