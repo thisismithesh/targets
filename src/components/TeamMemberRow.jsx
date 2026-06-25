@@ -10,9 +10,9 @@ export default function TeamMemberRow({ teamMember, weekId, tasks = [] }) {
   return (
     <Link
       to={`/team/${teamMember.id}/week/${weekId}`}
-      className="flex items-center justify-between gap-4 py-3 px-1 border-b border-gray-100 last:border-b-0 hover:bg-gray-50 transition-colors"
+      className="group flex items-center justify-between gap-4 py-3 px-1 border-b border-gray-100 last:border-b-0 hover:bg-gray-50 transition-colors"
     >
-      <span className="text-base font-medium text-gray-900 truncate">{teamMember.name}</span>
+      <span className="text-base font-medium text-gray-900 truncate group-hover:underline">{teamMember.name}</span>
 
       <div className="flex items-center gap-2.5 flex-shrink-0">
         <span className="text-sm text-gray-500 tabular-nums">
