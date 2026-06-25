@@ -1,6 +1,8 @@
 // Animated celebration shown when a member completes every task in a week.
 // Stays until the user clicks anywhere to dismiss.
-export default function CleanSweepPopup({ onClose }) {
+export default function CleanSweepPopup({ show, onClose }) {
+  if (!show) return null
+  
   return (
     <div
       className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/40 sweep-overlay"
