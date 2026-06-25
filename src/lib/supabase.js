@@ -190,10 +190,9 @@ export async function updateTeamMember(memberId, updates) {
     .from('team_members')
     .update(updates)
     .eq('id', memberId)
-    .select()
 
   if (error) throw error
-  return data?.[0]
+  return data
 }
 
 // Helper function to delete a team member
@@ -208,16 +207,17 @@ export async function deleteTeamMember(memberId) {
 
 // Helper function to save team member positions
 export async function saveTeamMemberPositions(members) {
-  const updates = members.map((member, index) => ({
-    id: member.id,
-    position: index
-  }))
-  
-  const { error } = await supabase
-    .from('team_members')
-    .upsert(updates, { onConflict: 'id' })
-
-  if (error) throw error
+  try {
+    // Update each member's position individually
+    const updatePromises = members.map((member, index) =>
+      updateTeamMember(member.id, { position: index })
+    )
+    
+    await Promise.all(updatePromises)
+  } catch (error) {
+    console.error('Supabase error:', error)
+    throw error
+  }
 }
 
 // ── Clean sweeps (stars) ───────────────────────────────────────────
