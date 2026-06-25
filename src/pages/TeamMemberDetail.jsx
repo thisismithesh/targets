@@ -34,7 +34,7 @@ export default function TeamMemberDetail() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [newTask, setNewTask] = useState({
     task_name: '',
-    heading: 'General',
+    heading: '',
     deadline: '',
     estimated_hours: '',
   })
@@ -156,8 +156,12 @@ export default function TeamMemberDetail() {
 
   const handleAddTask = async (e) => {
     e.preventDefault()
-    if (!newTask.task_name) {
+    if (!newTask.task_name.trim()) {
       setAddMessage('Please enter a task name')
+      return
+    }
+    if (!newTask.heading.trim()) {
+      setAddMessage('Please enter a project/category')
       return
     }
     try {
@@ -165,7 +169,7 @@ export default function TeamMemberDetail() {
         team_member_id: memberId,
         week_id: weekId,
         task_name: newTask.task_name,
-        heading: newTask.heading || 'General',
+        heading: newTask.heading.trim(),
         deadline: newTask.deadline || null,
         estimated_hours: newTask.estimated_hours ? parseFloat(newTask.estimated_hours) : null,
         status: 'pending',
@@ -175,7 +179,7 @@ export default function TeamMemberDetail() {
         setTasks((prev) => [...prev, created])
         setSubtaskMap((prev) => ({ ...prev, [created.id]: [] }))
       }
-      setNewTask({ task_name: '', heading: 'General', deadline: '', estimated_hours: '' })
+      setNewTask({ task_name: '', heading: '', deadline: '', estimated_hours: '' })
       setAddMessage('')
       setShowAddForm(false)
     } catch (err) {
@@ -371,26 +375,37 @@ export default function TeamMemberDetail() {
                 <p className="mb-3 text-sm text-red-600">{addMessage}</p>
               )}
               <form onSubmit={handleAddTask} className="space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="sm:col-span-2">
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Task Name *</label>
-                    <input
-                      type="text"
-                      value={newTask.task_name}
-                      onChange={(e) => setNewTask({ ...newTask, task_name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g., Complete project report"
-                      autoFocus
-                    />
-                  </div>
+                <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Task Name *</label>
+                  <input
+                    type="text"
+                    value={newTask.task_name}
+                    onChange={(e) => setNewTask({ ...newTask, task_name: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., Complete project report"
+                    autoFocus
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Project/Category</label>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Project/Category *</label>
                     <input
                       type="text"
                       value={newTask.heading}
                       onChange={(e) => setNewTask({ ...newTask, heading: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="e.g., General"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Deadline</label>
+                    <input
+                      type="date"
+                      value={newTask.deadline}
+                      onChange={(e) => setNewTask({ ...newTask, deadline: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                   <div>
@@ -405,15 +420,7 @@ export default function TeamMemberDetail() {
                       placeholder="e.g., 4.5"
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Deadline</label>
-                    <input
-                      type="date"
-                      value={newTask.deadline}
-                      onChange={(e) => setNewTask({ ...newTask, deadline: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
+                </div>
                 </div>
                 <div className="flex gap-2 pt-1">
                   <button
@@ -468,7 +475,7 @@ export default function TeamMemberDetail() {
               {orderedHeadings.map((heading, hIndex) => {
                 const headingTasks = tasksByHeading[heading]
                 return (
-                <div key={heading} className="mb-6">
+                <div key={heading} className="mb-10 last:mb-0">
                   <div className="flex items-center justify-between mb-3 pb-2 border-b border-gray-200">
                     <div className="flex items-center gap-2">
                       <div className="flex flex-col -my-1">
@@ -508,7 +515,7 @@ export default function TeamMemberDetail() {
                       + Add
                     </button>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-0">
                     {headingTasks.map((task, index) => (
                       <Task
                         key={task.id}
