@@ -111,9 +111,11 @@ export default function TeamMemberDetail() {
     }
   }
 
-  // A clean sweep = at least one task and every task completed.
-  const computeSwept = (list) =>
-    list.length > 0 && list.every((t) => t.status === 'completed')
+  // A clean sweep = at least one non-on-hold task and every non-on-hold task completed.
+  const computeSwept = (list) => {
+    const actionable = list.filter((t) => t.status !== 'on-hold')
+    return actionable.length > 0 && actionable.every((t) => t.status === 'completed')
+  }
 
   // Silent reload: refresh task data in the background without the loading spinner
   const handleTaskUpdate = async () => {
@@ -342,10 +344,10 @@ export default function TeamMemberDetail() {
                   ← Back to Dashboard
                 </Link>
               </div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-3xl font-bold text-gray-900">{teamMember.name}</h1>
+              <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
+                <span>{teamMember.name}</span>
                 <Stars count={starCount} />
-              </div>
+              </h1>
               <p className="text-lg text-gray-600">{getWeekLabelShort(week.week_start_date)}</p>
             </div>
             <button
