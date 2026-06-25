@@ -287,7 +287,7 @@ export default function TeamMemberDetail() {
 
     // Persist new order
     try {
-      await Promise.all(reordered.map((h, i) => saveHeadingOrder(memberId, weekId, h, i)))
+      await saveHeadingOrder(memberId, weekId, reordered)
     } catch (err) {
       console.error('Error saving heading order:', err)
     }
