@@ -280,11 +280,25 @@ export default function TeamMemberDetail() {
     tasksByHeading[t.heading].push(t)
   })
 
-  // Sort headings: use saved order if available, else fall back to alphabetical
+  // Sort headings: honor the user's saved order if present; otherwise the
+  // default 'Internal' project sits at the bottom and everything else stays
+  // alphabetical. (Keep 'Internal' in sync with INTERNAL_PROJECT in supabase.js.)
+  const INTERNAL_PROJECT = 'Internal'
   const orderedHeadings = Array.from(allHeadings).sort((a, b) => {
-    const orderA = headingOrders[a] ?? Infinity
-    const orderB = headingOrders[b] ?? Infinity
-    if (orderA !== Infinity || orderB !== Infinity) return orderA - orderB
+    const orderA = headingOrders[a]
+    const orderB = headingOrders[b]
+    const hasA = orderA !== undefined
+    const hasB = orderB !== undefined
+
+    // Both explicitly ordered → honor it fully (lets a user move 'Internal').
+    if (hasA && hasB) return orderA - orderB
+    // An explicitly-ordered heading always precedes an unordered one.
+    if (hasA) return -1
+    if (hasB) return 1
+
+    // Neither ordered: pin 'Internal' last, rest alphabetical.
+    if (a === INTERNAL_PROJECT && b !== INTERNAL_PROJECT) return 1
+    if (b === INTERNAL_PROJECT && a !== INTERNAL_PROJECT) return -1
     return a.localeCompare(b)
   })
 
