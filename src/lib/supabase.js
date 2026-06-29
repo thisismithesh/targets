@@ -163,32 +163,66 @@ export async function getOrCreateWeek(weekStartDate) {
   return week
 }
 
-// Bring incomplete tasks from the previous week into `week`, marked as
-// carried-forward (purple). Idempotent — safe to call on every load.
-//
-// Rules:
-//  • Only ever writes into the CURRENT week. We never modify a future week
-//    (its previous week hasn't ended, so nothing is "incomplete by week's
-//    end" yet) and never rewrite a past week (history stays as it was).
-//    Both are enforced purely from the week's own end date vs. today.
-//  • A task carries forward when it is NOT completed and NOT on hold. On-hold
-//    tasks are intentionally parked and have their own (red) indicator, so we
-//    leave them where they are. Empty heading-placeholder rows (blank
-//    task_name) are skipped.
-//  • Carried tasks reappear as a fresh 'pending' task with carry_forward_weeks
-//    incremented — matching how the manual carry-forward toggle already marks
-//    a task purple, and letting the "(Nw)" counter grow week over week.
-//  • Subtasks are not copied (top-level weekly targets only).
+// Build an insert row that copies a task, preserving the data that should
+// travel with a carry-forward: status (incl. on-hold + reason), position
+// (order), the visual indent flag, deadline and hours. `overrides` sets the
+// destination week, parent link and source pointer.
+function copyTaskRow(src, overrides) {
+  // Preserve on-hold; anything else carries as pending (purple via the
+  // incremented carry_forward_weeks). 'completed' tasks are filtered out
+  // before we ever get here.
+  const status = src.status === 'on-hold' ? 'on-hold' : 'pending'
+  return {
+    team_member_id: src.team_member_id,
+    week_id: src.week_id,
+    heading: src.heading,
+    task_name: src.task_name,
+    deadline: src.deadline ?? null,
+    completed_date: null,
+    estimated_hours: src.estimated_hours ?? null,
+    status,
+    on_hold_reason: status === 'on-hold' ? (src.on_hold_reason ?? null) : null,
+    carry_forward_weeks: (src.carry_forward_weeks || 0) + 1,
+    parent_task_id: src.parent_task_id ?? null,
+    position: src.position ?? 0,
+    is_indented: src.is_indented ?? false,
+    carried_from_task_id: null,
+    carried_forward: false,
+    ...overrides,
+  }
+}
+
+// Copy task comments from source tasks onto their newly-created copies.
+// `sourceToNew` maps a source task id → the new task id.
+async function copyCommentsForTasks(sourceToNew) {
+  const sourceIds = [...sourceToNew.keys()]
+  if (sourceIds.length === 0) return
+  const { data: comments } = await supabase
+    .from('task_comments')
+    .select('task_id, body, created_at')
+    .in('task_id', sourceIds)
+  if (!comments || comments.length === 0) return
+  const rows = comments.map((c) => ({
+    task_id: sourceToNew.get(c.task_id),
+    body: c.body,
+    created_at: c.created_at,
+  }))
+  await supabase.from('task_comments').insert(rows)
+}
+
+// Carry-forward orchestrator. Runs only for the CURRENT week (its previous
+// week has ended and this week hasn't), so we never rewrite history or
+// pre-fill future weeks. Two passes:
+//   1. removeResolvedCarryForwards — drop copies whose source got completed.
+//   2. createCarryForwards         — copy still-unfinished source tasks across
+//                                    (once each), with order, indent, on-hold
+//                                    state, subtasks and comments preserved.
 async function carryForwardIntoWeek(week) {
   if (!week) return
 
   const today = isoToday()
+  if (week.week_end_date < today) return // past week → leave history alone
 
-  // Don't touch weeks that have already ended (past weeks). Comparing the
-  // ISO end date string directly is valid.
-  if (week.week_end_date < today) return
-
-  // Find the immediately preceding week.
   const prevStart = isoAddDays(week.week_start_date, -7)
   const { data: prevWeek } = await supabase
     .from('weeks')
@@ -197,92 +231,158 @@ async function carryForwardIntoWeek(week) {
     .maybeSingle()
 
   if (!prevWeek) return
-
-  // The previous week must have actually ended. This also prevents carrying
-  // into a *future* week, whose previous week is the still-running current
-  // week.
-  if (!(prevWeek.week_end_date < today)) return
+  if (!(prevWeek.week_end_date < today)) return // prev hasn't ended → too early
 
   if (carryForwardInFlight.has(week.id)) return
   carryForwardInFlight.add(week.id)
-
   try {
-    // Top-level tasks from the previous week that didn't get finished.
-    const { data: prevTasks, error: prevErr } = await supabase
-      .from('tasks')
-      .select('*')
-      .eq('week_id', prevWeek.id)
-      .is('parent_task_id', null)
-
-    if (prevErr) throw prevErr
-
-    const carryable = (prevTasks || []).filter(
-      (t) =>
-        t.task_name &&
-        t.task_name.trim() !== '' &&
-        t.status !== 'completed' &&
-        t.status !== 'on-hold'
-    )
-
-    if (carryable.length === 0) return
-
-    // Existing top-level tasks already in the target week — used to dedupe so
-    // repeat loads don't pile up copies.
-    const { data: currTasks, error: currErr } = await supabase
-      .from('tasks')
-      .select('id, team_member_id, heading, task_name, position')
-      .eq('week_id', week.id)
-      .is('parent_task_id', null)
-
-    if (currErr) throw currErr
-
-    const dedupeKey = (memberId, heading, name) =>
-      `${memberId}||${heading || ''}||${(name || '').trim().toLowerCase()}`
-
-    const existingKeys = new Set(
-      (currTasks || []).map((t) => dedupeKey(t.team_member_id, t.heading, t.task_name))
-    )
-
-    // Track the next position per member so carried tasks append cleanly.
-    const maxPosByMember = {}
-    for (const t of currTasks || []) {
-      const p = t.position ?? 0
-      if (maxPosByMember[t.team_member_id] === undefined || p > maxPosByMember[t.team_member_id]) {
-        maxPosByMember[t.team_member_id] = p
-      }
-    }
-
-    const toInsert = []
-    for (const t of carryable) {
-      const key = dedupeKey(t.team_member_id, t.heading, t.task_name)
-      if (existingKeys.has(key)) continue
-      existingKeys.add(key) // also dedupe within this batch
-
-      const base = maxPosByMember[t.team_member_id] ?? -1
-      const nextPos = base + 1
-      maxPosByMember[t.team_member_id] = nextPos
-
-      toInsert.push({
-        team_member_id: t.team_member_id,
-        week_id: week.id,
-        heading: t.heading,
-        task_name: t.task_name,
-        deadline: t.deadline,
-        estimated_hours: t.estimated_hours,
-        status: 'pending',
-        on_hold_reason: null,
-        carry_forward_weeks: (t.carry_forward_weeks || 0) + 1,
-        parent_task_id: null,
-        position: nextPos,
-      })
-    }
-
-    if (toInsert.length > 0) {
-      const { error: insErr } = await supabase.from('tasks').insert(toInsert)
-      if (insErr) throw insErr
-    }
+    await removeResolvedCarryForwards(week)
+    await createCarryForwards(week, prevWeek)
   } finally {
     carryForwardInFlight.delete(week.id)
+  }
+}
+
+// Pass 1 — if a carried copy's source task has since been completed, remove
+// the copy (it shouldn't keep nagging this week). The source is then un-marked
+// so that re-opening it later will carry it forward again. Copies the user has
+// already completed themselves are left untouched. If a source was deleted
+// outright, the copy is left in place as an independent task.
+async function removeResolvedCarryForwards(week) {
+  const { data: copies } = await supabase
+    .from('tasks')
+    .select('id, status, carried_from_task_id')
+    .eq('week_id', week.id)
+    .not('carried_from_task_id', 'is', null)
+
+  if (!copies || copies.length === 0) return
+
+  const sourceIds = [...new Set(copies.map((c) => c.carried_from_task_id))]
+  const { data: sources } = await supabase
+    .from('tasks')
+    .select('id, status')
+    .in('id', sourceIds)
+  const sourceStatus = new Map((sources || []).map((s) => [s.id, s.status]))
+
+  const toDelete = []
+  const sourcesToReopen = []
+  for (const c of copies) {
+    if (sourceStatus.get(c.carried_from_task_id) === 'completed' && c.status !== 'completed') {
+      toDelete.push(c.id)
+      sourcesToReopen.push(c.carried_from_task_id)
+    }
+  }
+  if (toDelete.length === 0) return
+
+  // Clean up comments on the copies (and any of their subtasks) first, then
+  // delete the copies — subtasks cascade via parent_task_id.
+  const { data: subs } = await supabase.from('tasks').select('id').in('parent_task_id', toDelete)
+  const commentTaskIds = [...toDelete, ...(subs || []).map((s) => s.id)]
+  await supabase.from('task_comments').delete().in('task_id', commentTaskIds)
+  await supabase.from('tasks').delete().in('id', toDelete)
+  await supabase
+    .from('tasks')
+    .update({ carried_forward: false })
+    .in('id', [...new Set(sourcesToReopen)])
+}
+
+// Pass 2 — copy each still-unfinished top-level source task into this week
+// exactly once. The one-time guard (`carried_forward` on the source) is what
+// lets a user delete a carried task without it reappearing on the next load.
+async function createCarryForwards(week, prevWeek) {
+  const { data: prevTop } = await supabase
+    .from('tasks')
+    .select('*')
+    .eq('week_id', prevWeek.id)
+    .is('parent_task_id', null)
+
+  const carryable = (prevTop || []).filter(
+    (s) =>
+      s.task_name &&
+      s.task_name.trim() !== '' &&
+      s.status !== 'completed' &&
+      !s.carried_forward // not yet carried (or re-opened after completion)
+  )
+  if (carryable.length === 0) return
+
+  // Existing top-level tasks in this week, for de-duplication / adoption.
+  const { data: currTop } = await supabase
+    .from('tasks')
+    .select('id, team_member_id, heading, task_name, carry_forward_weeks, carried_from_task_id')
+    .eq('week_id', week.id)
+    .is('parent_task_id', null)
+
+  const keyOf = (m, h, n) => `${m}||${h || ''}||${(n || '').trim().toLowerCase()}`
+  const existingByKey = new Map()
+  for (const t of currTop || []) existingByKey.set(keyOf(t.team_member_id, t.heading, t.task_name), t)
+
+  const sourcesToCreate = []
+  const adoptions = [] // { taskId, sourceId } — link pre-existing copies
+  const flagDone = []  // source ids to mark carried_forward = true
+
+  for (const s of carryable) {
+    flagDone.push(s.id)
+    const existing = existingByKey.get(keyOf(s.team_member_id, s.heading, s.task_name))
+    if (existing) {
+      // A carried copy already here but not linked (e.g. from an older
+      // version) → adopt it so completion/removal can track it.
+      if ((existing.carry_forward_weeks || 0) > 0 && !existing.carried_from_task_id) {
+        adoptions.push({ taskId: existing.id, sourceId: s.id })
+      }
+      continue // don't duplicate
+    }
+    sourcesToCreate.push(s)
+  }
+
+  // 1) Insert the new top-level copies and map source id → new id.
+  const newBySource = new Map()
+  if (sourcesToCreate.length) {
+    const rows = sourcesToCreate.map((s) =>
+      copyTaskRow(s, { week_id: week.id, parent_task_id: null, carried_from_task_id: s.id })
+    )
+    const { data: inserted } = await supabase
+      .from('tasks')
+      .insert(rows)
+      .select('id, carried_from_task_id')
+    for (const r of inserted || []) newBySource.set(r.carried_from_task_id, r.id)
+  }
+
+  // 2) Carry subtasks of those newly-created parents.
+  if (newBySource.size) {
+    const parentSourceIds = [...newBySource.keys()]
+    const { data: subSrc } = await supabase
+      .from('tasks')
+      .select('*')
+      .in('parent_task_id', parentSourceIds)
+
+    if (subSrc && subSrc.length) {
+      const subRows = subSrc.map((ss) =>
+        copyTaskRow(ss, {
+          week_id: week.id,
+          parent_task_id: newBySource.get(ss.parent_task_id),
+          carried_from_task_id: ss.id,
+        })
+      )
+      const { data: insertedSubs } = await supabase
+        .from('tasks')
+        .insert(subRows)
+        .select('id, carried_from_task_id')
+      for (const r of insertedSubs || []) newBySource.set(r.carried_from_task_id, r.id)
+    }
+
+    // 3) Carry comments for every copied task (parents + subtasks).
+    await copyCommentsForTasks(newBySource)
+  }
+
+  // Link any adopted copies.
+  for (const a of adoptions) {
+    await supabase.from('tasks').update({ carried_from_task_id: a.sourceId }).eq('id', a.taskId)
+  }
+
+  // Mark all processed sources so they aren't carried again (this is what
+  // makes a user's deletion of a carried task stick).
+  if (flagDone.length) {
+    await supabase.from('tasks').update({ carried_forward: true }).in('id', flagDone)
   }
 }
 
