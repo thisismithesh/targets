@@ -73,13 +73,35 @@ export async function getWeekById(weekId) {
   return data
 }
 
+// ── Date helpers (timezone-safe, operate on 'YYYY-MM-DD' strings) ─────
+// Add (or subtract) whole days to an ISO date string without drifting
+// across timezones. ISO date strings also compare correctly with < / >=,
+// which we rely on below.
+function isoAddDays(iso, days) {
+  const d = new Date(`${iso}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+// Today's local date as 'YYYY-MM-DD'.
+function isoToday() {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+// Guard against the same week being processed twice concurrently within a
+// single tab (e.g. React StrictMode double-invokes effects in dev, or a
+// rapid refresh). Without a DB unique constraint this is the cheap way to
+// avoid inserting duplicate carried-forward tasks from overlapping runs.
+const carryForwardInFlight = new Set()
+
 // Helper: get or create a week by its Monday start date (YYYY-MM-DD)
 export async function getOrCreateWeek(weekStartDate) {
   // weekStartDate must be a Monday in 'YYYY-MM-DD' format
-  const d = new Date(weekStartDate)
-  const endDate = new Date(d)
-  endDate.setDate(d.getDate() + 6)
-  const weekEndDate = endDate.toISOString().split('T')[0]
+  const weekEndDate = isoAddDays(weekStartDate, 6)
 
   // Try to fetch first
   const { data: existing } = await supabase
@@ -88,17 +110,153 @@ export async function getOrCreateWeek(weekStartDate) {
     .eq('week_start_date', weekStartDate)
     .maybeSingle()
 
-  if (existing) return existing
+  let week = existing
 
-  // Create if missing
-  const { data, error } = await supabase
+  if (!week) {
+    // Create if missing
+    const { data, error } = await supabase
+      .from('weeks')
+      .insert([{ week_start_date: weekStartDate, week_end_date: weekEndDate }])
+      .select()
+      .single()
+
+    if (error) throw error
+    week = data
+  }
+
+  // Auto carry-forward any unfinished tasks from the previous week into the
+  // current week. Best-effort: a failure here must never block loading the
+  // week, so we swallow errors after logging them.
+  try {
+    await carryForwardIntoWeek(week)
+  } catch (err) {
+    console.error('Carry-forward failed:', err)
+  }
+
+  return week
+}
+
+// Bring incomplete tasks from the previous week into `week`, marked as
+// carried-forward (purple). Idempotent — safe to call on every load.
+//
+// Rules:
+//  • Only ever writes into the CURRENT week. We never modify a future week
+//    (its previous week hasn't ended, so nothing is "incomplete by week's
+//    end" yet) and never rewrite a past week (history stays as it was).
+//    Both are enforced purely from the week's own end date vs. today.
+//  • A task carries forward when it is NOT completed and NOT on hold. On-hold
+//    tasks are intentionally parked and have their own (red) indicator, so we
+//    leave them where they are. Empty heading-placeholder rows (blank
+//    task_name) are skipped.
+//  • Carried tasks reappear as a fresh 'pending' task with carry_forward_weeks
+//    incremented — matching how the manual carry-forward toggle already marks
+//    a task purple, and letting the "(Nw)" counter grow week over week.
+//  • Subtasks are not copied (top-level weekly targets only).
+async function carryForwardIntoWeek(week) {
+  if (!week) return
+
+  const today = isoToday()
+
+  // Don't touch weeks that have already ended (past weeks). Comparing the
+  // ISO end date string directly is valid.
+  if (week.week_end_date < today) return
+
+  // Find the immediately preceding week.
+  const prevStart = isoAddDays(week.week_start_date, -7)
+  const { data: prevWeek } = await supabase
     .from('weeks')
-    .insert([{ week_start_date: weekStartDate, week_end_date: weekEndDate }])
-    .select()
-    .single()
+    .select('*')
+    .eq('week_start_date', prevStart)
+    .maybeSingle()
 
-  if (error) throw error
-  return data
+  if (!prevWeek) return
+
+  // The previous week must have actually ended. This also prevents carrying
+  // into a *future* week, whose previous week is the still-running current
+  // week.
+  if (!(prevWeek.week_end_date < today)) return
+
+  if (carryForwardInFlight.has(week.id)) return
+  carryForwardInFlight.add(week.id)
+
+  try {
+    // Top-level tasks from the previous week that didn't get finished.
+    const { data: prevTasks, error: prevErr } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('week_id', prevWeek.id)
+      .is('parent_task_id', null)
+
+    if (prevErr) throw prevErr
+
+    const carryable = (prevTasks || []).filter(
+      (t) =>
+        t.task_name &&
+        t.task_name.trim() !== '' &&
+        t.status !== 'completed' &&
+        t.status !== 'on-hold'
+    )
+
+    if (carryable.length === 0) return
+
+    // Existing top-level tasks already in the target week — used to dedupe so
+    // repeat loads don't pile up copies.
+    const { data: currTasks, error: currErr } = await supabase
+      .from('tasks')
+      .select('id, team_member_id, heading, task_name, position')
+      .eq('week_id', week.id)
+      .is('parent_task_id', null)
+
+    if (currErr) throw currErr
+
+    const dedupeKey = (memberId, heading, name) =>
+      `${memberId}||${heading || ''}||${(name || '').trim().toLowerCase()}`
+
+    const existingKeys = new Set(
+      (currTasks || []).map((t) => dedupeKey(t.team_member_id, t.heading, t.task_name))
+    )
+
+    // Track the next position per member so carried tasks append cleanly.
+    const maxPosByMember = {}
+    for (const t of currTasks || []) {
+      const p = t.position ?? 0
+      if (maxPosByMember[t.team_member_id] === undefined || p > maxPosByMember[t.team_member_id]) {
+        maxPosByMember[t.team_member_id] = p
+      }
+    }
+
+    const toInsert = []
+    for (const t of carryable) {
+      const key = dedupeKey(t.team_member_id, t.heading, t.task_name)
+      if (existingKeys.has(key)) continue
+      existingKeys.add(key) // also dedupe within this batch
+
+      const base = maxPosByMember[t.team_member_id] ?? -1
+      const nextPos = base + 1
+      maxPosByMember[t.team_member_id] = nextPos
+
+      toInsert.push({
+        team_member_id: t.team_member_id,
+        week_id: week.id,
+        heading: t.heading,
+        task_name: t.task_name,
+        deadline: t.deadline,
+        estimated_hours: t.estimated_hours,
+        status: 'pending',
+        on_hold_reason: null,
+        carry_forward_weeks: (t.carry_forward_weeks || 0) + 1,
+        parent_task_id: null,
+        position: nextPos,
+      })
+    }
+
+    if (toInsert.length > 0) {
+      const { error: insErr } = await supabase.from('tasks').insert(toInsert)
+      if (insErr) throw insErr
+    }
+  } finally {
+    carryForwardInFlight.delete(week.id)
+  }
 }
 
 // Helper: get all weeks ordered by date (for navigation)
