@@ -92,6 +92,24 @@ function isoToday() {
   return `${y}-${m}-${day}`
 }
 
+// ── Default 'Internal' project ───────────────────────────────────────
+// Name of the default project (heading) added to every member's week.
+// NOTE: this exact string is also pinned to the bottom of the project list
+// in TeamMemberDetail.jsx — keep the two in sync.
+export const INTERNAL_PROJECT = 'Internal'
+
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+// Default career-journal task name for a given week start date (YYYY-MM-DD),
+// e.g. 'Career progress journal for Week 2 of Jan'. The week number matches
+// getWeekLabelShort(): ceil(day-of-month / 7) of the week's Monday.
+export function internalJournalTaskName(weekStartDate) {
+  const [, month, day] = weekStartDate.split('-').map((n) => parseInt(n, 10))
+  const weekNumber = Math.ceil(day / 7)
+  const monthName = MONTH_ABBR[month - 1] || ''
+  return `Career progress journal for Week ${weekNumber} of ${monthName}`
+}
+
 // Guard against the same week being processed twice concurrently within a
 // single tab (e.g. React StrictMode double-invokes effects in dev, or a
 // rapid refresh). Without a DB unique constraint this is the cheap way to
@@ -122,6 +140,15 @@ export async function getOrCreateWeek(weekStartDate) {
 
     if (error) throw error
     week = data
+  }
+
+  // Ensure every team member has the default 'Internal' project + weekly
+  // career-journal task for this week. Best-effort; runs before carry-forward
+  // so the default task exists first.
+  try {
+    await ensureInternalProjectForWeek(week)
+  } catch (err) {
+    console.error('Ensure Internal project failed:', err)
   }
 
   // Auto carry-forward any unfinished tasks from the previous week into the
@@ -256,6 +283,81 @@ async function carryForwardIntoWeek(week) {
     }
   } finally {
     carryForwardInFlight.delete(week.id)
+  }
+}
+
+// In-tab guard so the default project isn't inserted twice by overlapping
+// loads (React StrictMode double-invoke, rapid refresh, etc.).
+const internalProjectInFlight = new Set()
+
+// Ensure every team member has the default 'Internal' project containing the
+// weekly career-journal task for `week`. Idempotent — safe to call on every
+// load. Applies to the current and future weeks only; past (already-ended)
+// weeks are left untouched so historical records and clean-sweep stars aren't
+// disturbed.
+async function ensureInternalProjectForWeek(week) {
+  if (!week) return
+
+  // Don't backfill weeks that have already ended.
+  if (week.week_end_date < isoToday()) return
+
+  if (internalProjectInFlight.has(week.id)) return
+  internalProjectInFlight.add(week.id)
+
+  try {
+    const members = await getTeamMembers()
+    if (!members || members.length === 0) return
+
+    const journalName = internalJournalTaskName(week.week_start_date)
+
+    // All existing top-level tasks for this week: used to (a) detect which
+    // members already have the journal task, and (b) find each member's
+    // current max position so the new task lands at the bottom of their list.
+    const { data: existingTasks, error: exErr } = await supabase
+      .from('tasks')
+      .select('team_member_id, heading, task_name, position')
+      .eq('week_id', week.id)
+      .is('parent_task_id', null)
+
+    if (exErr) throw exErr
+
+    const haveJournal = new Set()
+    const maxPosByMember = {}
+    for (const t of existingTasks || []) {
+      if (t.heading === INTERNAL_PROJECT && t.task_name === journalName) {
+        haveJournal.add(t.team_member_id)
+      }
+      const p = t.position ?? 0
+      if (maxPosByMember[t.team_member_id] === undefined || p > maxPosByMember[t.team_member_id]) {
+        maxPosByMember[t.team_member_id] = p
+      }
+    }
+
+    const toInsert = []
+    for (const member of members) {
+      if (haveJournal.has(member.id)) continue
+      const nextPos = (maxPosByMember[member.id] ?? -1) + 1
+      toInsert.push({
+        team_member_id: member.id,
+        week_id: week.id,
+        heading: INTERNAL_PROJECT,
+        task_name: journalName,
+        deadline: null,
+        estimated_hours: null,
+        status: 'pending',
+        on_hold_reason: null,
+        carry_forward_weeks: 0,
+        parent_task_id: null,
+        position: nextPos,
+      })
+    }
+
+    if (toInsert.length > 0) {
+      const { error: insErr } = await supabase.from('tasks').insert(toInsert)
+      if (insErr) throw insErr
+    }
+  } finally {
+    internalProjectInFlight.delete(week.id)
   }
 }
 
