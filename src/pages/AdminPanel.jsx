@@ -55,7 +55,7 @@ export default function AdminPanel() {
       [
         { table: 'team_members' },
         { table: 'weeks' },
-        { table: 'projects' },
+        { table: 'project_options' },
       ],
       () => {
         loadDataSilent()
