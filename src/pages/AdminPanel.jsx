@@ -9,6 +9,10 @@ import {
   getCurrentWeek,
   getStarCounts,
   saveTeamMemberPositions,
+  getProjects,
+  createProject,
+  deleteProject,
+  subscribeToChanges,
 } from '../lib/supabase'
 import { getWeekLabelShort } from '../lib/utils'
 import Stars from '../components/Stars'
@@ -30,18 +34,90 @@ export default function AdminPanel() {
   const [editTeam, setEditTeam] = useState('')
   const [message, setMessage] = useState('')
   const [teams, setTeams] = useState([])
+  const [projects, setProjects] = useState([])
+  const [newProjectName, setNewProjectName] = useState('')
+  const [confirmDeleteProjectId, setConfirmDeleteProjectId] = useState(null)
 
   useEffect(() => {
     loadData()
+    loadProjects()
   }, [])
 
   useEffect(() => {
     if (selectedWeekId) loadHours()
   }, [selectedWeekId, teamMembers, selectedTeamForHours])
 
+  // Live-sync: reflect team member / project changes made elsewhere without
+  // requiring a manual refresh.
+  useEffect(() => {
+    const unsubscribe = subscribeToChanges(
+      'admin-panel',
+      [
+        { table: 'team_members' },
+        { table: 'weeks' },
+        { table: 'projects' },
+      ],
+      () => {
+        loadDataSilent()
+        loadProjects()
+      }
+    )
+    return unsubscribe
+  }, [])
+
+  const loadProjects = async () => {
+    try {
+      setProjects(await getProjects())
+    } catch (e) {
+      console.error('Error loading projects:', e)
+    }
+  }
+
+  const handleAddProject = async (e) => {
+    e.preventDefault()
+    if (!newProjectName.trim()) {
+      showMessage('Please enter a project name')
+      return
+    }
+    try {
+      await createProject(newProjectName.trim())
+      setNewProjectName('')
+      showMessage('Project added!')
+      await loadProjects()
+    } catch (err) {
+      showMessage('Error adding project')
+      console.error(err)
+    }
+  }
+
+  const handleDeleteProject = async (projectId) => {
+    try {
+      await deleteProject(projectId)
+      setConfirmDeleteProjectId(null)
+      showMessage('Project removed from the list.')
+      await loadProjects()
+    } catch (err) {
+      showMessage('Error deleting project')
+      console.error(err)
+    }
+  }
+
   const loadData = async () => {
     try {
       setIsLoading(true)
+      await loadDataSilent()
+    } catch (err) {
+      console.error('Error loading data:', err)
+      setMessage('Error loading data')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Same as loadData but never toggles the full-page loading spinner —
+  // used for background/realtime refreshes so the UI doesn't flicker.
+  const loadDataSilent = async () => {
+    try {
       const [members, allWeeks] = await Promise.all([getTeamMembers(), getAllWeeks()])
       setTeamMembers(members)
       setWeeks(allWeeks)
@@ -66,13 +142,11 @@ export default function AdminPanel() {
         const currentWeek = await getCurrentWeek()
         const weekToSelect = allWeeks.find(w => w.id === currentWeek.id) || allWeeks[0]
         setCurrentWeekId(currentWeek?.id || '')
-        setSelectedWeekId(weekToSelect.id)
+        setSelectedWeekId((curr) => curr || weekToSelect.id)
       }
     } catch (err) {
       console.error('Error loading data:', err)
       setMessage('Error loading data')
-    } finally {
-      setIsLoading(false)
     }
   }
 
@@ -342,6 +416,63 @@ export default function AdminPanel() {
                 <p className="text-sm text-gray-500 text-center py-4">No team members yet.</p>
               )}
             </div>
+          </div>
+        </div>
+
+        {/* Project List Management (dropdown options for "Add Project") */}
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <h2 className="text-xl font-bold text-gray-900 mb-4">Projects</h2>
+          <p className="text-sm text-gray-500 mb-4">
+            Manage the project names offered in the "Add Project" dropdown. Users can still type a custom name if it's not in this list.
+          </p>
+          <form onSubmit={handleAddProject} className="flex gap-2 mb-6">
+            <input
+              type="text"
+              value={newProjectName}
+              onChange={(e) => setNewProjectName(e.target.value)}
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="e.g., Backend Development"
+            />
+            <button
+              type="submit"
+              className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 font-medium flex-shrink-0"
+            >
+              Add
+            </button>
+          </form>
+
+          <div className="space-y-2">
+            {projects.map((project) => (
+              <div key={project.id} className="flex items-center justify-between p-3 bg-gray-50 rounded">
+                <span className="text-sm font-medium text-gray-900">{project.name}</span>
+                {confirmDeleteProjectId === project.id ? (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => handleDeleteProject(project.id)}
+                      className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 font-medium"
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      onClick={() => setConfirmDeleteProjectId(null)}
+                      className="px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300 font-medium"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmDeleteProjectId(project.id)}
+                    className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded font-medium"
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
+            ))}
+            {projects.length === 0 && (
+              <p className="text-sm text-gray-500 text-center py-4">No projects yet.</p>
+            )}
           </div>
         </div>
 
