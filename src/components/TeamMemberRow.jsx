@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import Stars from './Stars'
 
-export default function TeamMemberRow({ teamMember, weekId, tasks = [], starCount = 0 }) {
+export default function TeamMemberRow({ teamMember, weekId, weekStart, tasks = [], starCount = 0, unavailableDays = [] }) {
   // Exclude on-hold tasks entirely from the progress count
   const relevantTasks = tasks.filter((t) => t.status !== 'on-hold')
   const totalCount = relevantTasks.length
@@ -10,12 +10,23 @@ export default function TeamMemberRow({ teamMember, weekId, tasks = [], starCoun
 
   return (
     <Link
-      to={`/team/${teamMember.id}/week/${weekId}`}
+      to={{
+        pathname: `/team/${teamMember.id}/week/${weekId}`,
+        search: weekStart ? `?dashWeek=${weekStart}` : '',
+      }}
       className="group flex items-center justify-between gap-4 py-3 px-1 border-b border-gray-100 last:border-b-0 hover:bg-gray-50 transition-colors"
     >
       <span className="flex items-center gap-2 min-w-0">
         <span className="text-base font-medium text-gray-900 truncate group-hover:underline">{teamMember.name}</span>
         <Stars count={starCount} />
+        {unavailableDays.length > 0 && (
+          <span
+            className="px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800 flex-shrink-0"
+            title="Not available this week"
+          >
+            Out: {unavailableDays.join(', ')}
+          </span>
+        )}
       </span>
 
       <div className="flex items-center gap-2.5 flex-shrink-0">
