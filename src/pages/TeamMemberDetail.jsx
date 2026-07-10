@@ -264,7 +264,7 @@ export default function TeamMemberDetail() {
         { table: 'task_comments' },
         { table: 'clean_sweeps', filter: `team_member_id=eq.${memberId}` },
         { table: 'heading_orders', filter: `team_member_id=eq.${memberId}` },
-        { table: 'projects' },
+        { table: 'project_options' },
       ],
       () => {
         handleTaskUpdate()
