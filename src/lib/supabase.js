@@ -867,9 +867,11 @@ export async function removeDeadlineReflections(sourceTaskId) {
 // A simple named list that populates the "Add Project" dropdown when
 // creating a project/heading on a team member's week. Managed from the
 // Admin panel; users can still type a custom name outside this list.
+// NOTE: stored in `project_options` (not `projects`) to avoid colliding
+// with any pre-existing `projects` table in the database.
 export async function getProjects() {
   const { data, error } = await supabase
-    .from('projects')
+    .from('project_options')
     .select('*')
     .order('name', { ascending: true })
 
@@ -882,7 +884,7 @@ export async function createProject(name) {
   if (!trimmed) throw new Error('Project name is required')
 
   const { data, error } = await supabase
-    .from('projects')
+    .from('project_options')
     .insert([{ name: trimmed }])
     .select()
 
@@ -892,7 +894,7 @@ export async function createProject(name) {
 
 export async function deleteProject(projectId) {
   const { error } = await supabase
-    .from('projects')
+    .from('project_options')
     .delete()
     .eq('id', projectId)
 
