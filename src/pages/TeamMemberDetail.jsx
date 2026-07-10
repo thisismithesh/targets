@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, useSearchParams, Link } from 'react-router-dom'
 import {
   supabase,
   getSubtasks,
@@ -17,17 +17,22 @@ import {
   deleteProjectHeading,
   getProjects,
   ensureDeadlineReflections,
+  getUpcomingLeavePlans,
+  createLeavePlan,
+  deleteLeavePlan,
   subscribeToChanges,
 } from '../lib/supabase'
 import Task from '../components/Task'
 import CleanSweepPopup from '../components/CleanSweepPopup'
 import Stars from '../components/Stars'
-import { getWeekLabelShort, openDatePicker } from '../lib/utils'
+import { getWeekLabelShort, formatDate, openDatePicker } from '../lib/utils'
 
 const CUSTOM_PROJECT_OPTION = '__custom__'
 
 export default function TeamMemberDetail() {
   const { memberId, weekId } = useParams()
+  const [searchParams] = useSearchParams()
+  const dashWeek = searchParams.get('dashWeek')
   const [teamMember, setTeamMember] = useState(null)
   const [week, setWeek] = useState(null)
   const [tasks, setTasks] = useState([])
@@ -56,6 +61,12 @@ export default function TeamMemberDetail() {
   const [addMessage, setAddMessage] = useState('')
   const [projectOptions, setProjectOptions] = useState([])
   const [projectSelectValue, setProjectSelectValue] = useState('')
+
+  // Leave plans
+  const [leavePlans, setLeavePlans] = useState([])
+  const [showAddLeaveForm, setShowAddLeaveForm] = useState(false)
+  const [newLeave, setNewLeave] = useState({ start_date: '', end_date: '', reason: '' })
+  const [leaveMessage, setLeaveMessage] = useState('')
 
   // Delete-project (heading) confirmation
   const [confirmDeleteHeading, setConfirmDeleteHeading] = useState(null)
@@ -138,6 +149,54 @@ export default function TeamMemberDetail() {
   useEffect(() => {
     loadProjectOptions()
   }, [])
+
+  const loadLeavePlans = async () => {
+    try {
+      setLeavePlans(await getUpcomingLeavePlans(memberId))
+    } catch (e) {
+      console.error('Error loading leave plans:', e)
+    }
+  }
+
+  useEffect(() => {
+    if (memberId) loadLeavePlans()
+  }, [memberId])
+
+  const handleAddLeave = async (e) => {
+    e.preventDefault()
+    if (!newLeave.start_date || !newLeave.end_date) {
+      setLeaveMessage('Please pick both a start and end date')
+      return
+    }
+    if (newLeave.end_date < newLeave.start_date) {
+      setLeaveMessage('End date must be on or after the start date')
+      return
+    }
+    try {
+      await createLeavePlan(memberId, newLeave.start_date, newLeave.end_date, newLeave.reason)
+      setNewLeave({ start_date: '', end_date: '', reason: '' })
+      setLeaveMessage('')
+      setShowAddLeaveForm(false)
+      await loadLeavePlans()
+    } catch (err) {
+      setLeaveMessage('Error adding leave plan')
+      console.error(err)
+    }
+  }
+
+  const handleDeleteLeave = async (leaveId) => {
+    setLeavePlans((prev) => prev.filter((l) => l.id !== leaveId))
+    try {
+      await deleteLeavePlan(leaveId)
+    } catch (err) {
+      console.error('Error deleting leave plan:', err)
+      loadLeavePlans() // resync on failure
+    }
+  }
+
+  // Does this leave plan overlap the week currently being viewed?
+  const leaveOverlapsCurrentWeek = (leave) =>
+    !!week && leave.start_date <= week.week_end_date && leave.end_date >= week.week_start_date
 
   const fetchTasks = async () => {
     const { data: tasksData, error: tasksError } = await supabase
@@ -265,11 +324,13 @@ export default function TeamMemberDetail() {
         { table: 'clean_sweeps', filter: `team_member_id=eq.${memberId}` },
         { table: 'heading_orders', filter: `team_member_id=eq.${memberId}` },
         { table: 'project_options' },
+        { table: 'leave_plans', filter: `team_member_id=eq.${memberId}` },
       ],
       () => {
         handleTaskUpdate()
         refreshHeadingOrders()
         loadProjectOptions()
+        loadLeavePlans()
       }
     )
     return unsubscribe
@@ -516,7 +577,7 @@ export default function TeamMemberDetail() {
           <div className="flex items-center justify-between mb-6">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <Link to="/" className="text-blue-600 hover:text-blue-700 font-medium text-sm">
+                <Link to={dashWeek ? `/?week=${dashWeek}` : '/'} className="text-blue-600 hover:text-blue-700 font-medium text-sm">
                   ← Back to Dashboard
                 </Link>
               </div>
@@ -532,6 +593,95 @@ export default function TeamMemberDetail() {
             >
               {showAddProjectForm ? 'Cancel' : '+ Add Project'}
             </button>
+          </div>
+
+          {/* Leave Plans */}
+          <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-base font-semibold text-gray-900">Leave Plans</h3>
+              <button
+                onClick={() => { setShowAddLeaveForm((v) => !v); setLeaveMessage('') }}
+                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+              >
+                {showAddLeaveForm ? 'Cancel' : '+ Add Leave'}
+              </button>
+            </div>
+
+            {showAddLeaveForm && (
+              <form onSubmit={handleAddLeave} className="mb-4 p-3 bg-gray-50 rounded-md space-y-2">
+                {leaveMessage && <p className="text-sm text-red-600">{leaveMessage}</p>}
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Start date</label>
+                    <input
+                      type="date"
+                      value={newLeave.start_date}
+                      onChange={(e) => setNewLeave({ ...newLeave, start_date: e.target.value })}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">End date</label>
+                    <input
+                      type="date"
+                      value={newLeave.end_date}
+                      onChange={(e) => setNewLeave({ ...newLeave, end_date: e.target.value })}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Reason (optional)</label>
+                  <input
+                    type="text"
+                    value={newLeave.reason}
+                    onChange={(e) => setNewLeave({ ...newLeave, reason: e.target.value })}
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., Vacation"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 font-medium"
+                >
+                  Save
+                </button>
+              </form>
+            )}
+
+            {leavePlans.length === 0 ? (
+              <p className="text-sm text-gray-500">No upcoming leave plans.</p>
+            ) : (
+              <div className="space-y-2">
+                {leavePlans.map((leave) => {
+                  const isThisWeek = leaveOverlapsCurrentWeek(leave)
+                  return (
+                    <div
+                      key={leave.id}
+                      className={`flex items-center justify-between gap-2 p-2 rounded-md text-sm ${
+                        isThisWeek ? 'bg-yellow-50 border border-yellow-300' : 'bg-gray-50'
+                      }`}
+                    >
+                      <span className="min-w-0">
+                        {formatDate(leave.start_date)} – {formatDate(leave.end_date)}
+                        {leave.reason ? ` · ${leave.reason}` : ''}
+                        {isThisWeek && (
+                          <span className="ml-2 px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-200 text-yellow-800">
+                            This week
+                          </span>
+                        )}
+                      </span>
+                      <button
+                        onClick={() => handleDeleteLeave(leave.id)}
+                        className="text-xs text-red-600 hover:text-red-700 font-medium flex-shrink-0"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
 
           {/* Add Project Form */}
