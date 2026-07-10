@@ -863,7 +863,59 @@ export async function removeDeadlineReflections(sourceTaskId) {
   if (error) throw error
 }
 
-// ── Projects (admin-managed dropdown list) ───────────────────────────
+// ── Leave plans ───────────────────────────────────────────────────────
+// Leave plans are not tied to a specific week — they live on the team
+// member and are shown (until they pass) on every week's page, plus on
+// the home screen for whichever week is currently open.
+export async function getUpcomingLeavePlans(teamMemberId) {
+  const { data, error } = await supabase
+    .from('leave_plans')
+    .select('*')
+    .eq('team_member_id', teamMemberId)
+    .gte('end_date', isoToday())
+    .order('start_date', { ascending: true })
+
+  if (error) throw error
+  return data || []
+}
+
+export async function createLeavePlan(teamMemberId, startDate, endDate, reason) {
+  if (!teamMemberId || !startDate || !endDate) throw new Error('Missing leave plan fields')
+  const { data, error } = await supabase
+    .from('leave_plans')
+    .insert([{
+      team_member_id: teamMemberId,
+      start_date: startDate,
+      end_date: endDate,
+      reason: (reason || '').trim() || null,
+    }])
+    .select()
+
+  if (error) throw error
+  return data?.[0]
+}
+
+export async function deleteLeavePlan(leaveId) {
+  const { error } = await supabase
+    .from('leave_plans')
+    .delete()
+    .eq('id', leaveId)
+
+  if (error) throw error
+}
+
+// All leave plans (across every team member) that overlap a given week —
+// used by the Dashboard to show who's out and on which days.
+export async function getLeavePlansForWeek(weekStartDate, weekEndDate) {
+  const { data, error } = await supabase
+    .from('leave_plans')
+    .select('*')
+    .lte('start_date', weekEndDate)
+    .gte('end_date', weekStartDate)
+
+  if (error) throw error
+  return data || []
+}
 // A simple named list that populates the "Add Project" dropdown when
 // creating a project/heading on a team member's week. Managed from the
 // Admin panel; users can still type a custom name outside this list.
