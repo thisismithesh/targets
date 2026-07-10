@@ -53,6 +53,17 @@ export function getWeekLabelShort(weekStartDate) {
   return `${monthName} Week ${weekNumber}`
 }
 
+// e.g. "July 6 to July 12" (drops the repeated month if both dates share one:
+// "July 6 to 12"). Falls back gracefully if only a start date is available.
+export function getWeekRangeLabel(weekStartDate, weekEndDate) {
+  const start = parseISO(weekStartDate)
+  const end = weekEndDate ? parseISO(weekEndDate) : addWeeks(start, 1)
+  const sameMonth = format(start, 'MMMM') === format(end, 'MMMM')
+  const startLabel = format(start, 'MMMM d')
+  const endLabel = sameMonth ? format(end, 'd') : format(end, 'MMMM d')
+  return `${startLabel} to ${endLabel}`
+}
+
 export function getStatusColor(status, carryForwardWeeks = 0) {
   if (status === 'on-hold') return 'red'
   if (status === 'carry-forward' || carryForwardWeeks > 0) return 'purple'
