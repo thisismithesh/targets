@@ -83,6 +83,15 @@ function isoAddDays(iso, days) {
   return d.toISOString().slice(0, 10)
 }
 
+// Monday (YYYY-MM-DD) of the week containing the given ISO date string.
+function mondayOf(iso) {
+  const d = new Date(`${iso}T00:00:00Z`)
+  const day = d.getUTCDay() // 0 = Sunday .. 6 = Saturday
+  const diff = day === 0 ? -6 : 1 - day
+  d.setUTCDate(d.getUTCDate() + diff)
+  return d.toISOString().slice(0, 10)
+}
+
 // Today's local date as 'YYYY-MM-DD'.
 function isoToday() {
   const d = new Date()
@@ -713,4 +722,203 @@ export async function saveHeadingOrder(teamMemberId, weekId, orderedHeadings) {
     .upsert(rows, { onConflict: 'team_member_id,week_id,heading' })
 
   if (error) throw error
+}
+
+// ── Delete a project (heading) and all its tasks ────────────────────
+// Removes every top-level task under `heading` for this member+week.
+// Subtasks cascade automatically via the parent_task_id FK.
+export async function deleteProjectHeading(teamMemberId, weekId, heading) {
+  const { error } = await supabase
+    .from('tasks')
+    .delete()
+    .eq('team_member_id', teamMemberId)
+    .eq('week_id', weekId)
+    .eq('heading', heading)
+    .is('parent_task_id', null)
+
+  if (error) throw error
+
+  // Best-effort cleanup of the saved heading order/position for this heading.
+  try {
+    await supabase
+      .from('heading_orders')
+      .delete()
+      .eq('team_member_id', teamMemberId)
+      .eq('week_id', weekId)
+      .eq('heading', heading)
+  } catch (e) {
+    console.error('Error cleaning up heading order:', e)
+  }
+}
+
+// ── Deadline reflections ─────────────────────────────────────────────
+// If a task's deadline falls in a week later than the week it lives in,
+// mirror a lightweight linked copy of it into every week in between (up to
+// and including the deadline's week), so the upcoming deadline stays
+// visible while the team member works toward it. Reflections are linked
+// back to their source task via `deadline_reflection_source_id` and are
+// removed automatically (DB cascade) if the source task is deleted.
+//
+// Call this after creating/updating a task whose deadline may have changed.
+// It's a no-op (and cleans up any stale reflections) for tasks that are
+// on-hold, completed, have no deadline, or are themselves a reflection.
+export async function ensureDeadlineReflections(task) {
+  if (!task || !task.id) return
+  if (task.deadline_reflection_source_id) return // never cascade from a reflection
+
+  const shouldHaveNoReflections =
+    !task.deadline ||
+    task.status === 'on-hold' ||
+    task.status === 'completed' ||
+    !task.task_name ||
+    !task.task_name.trim()
+
+  if (shouldHaveNoReflections) {
+    try {
+      await removeDeadlineReflections(task.id)
+    } catch (e) {
+      console.error('Error clearing deadline reflections:', e)
+    }
+    return
+  }
+
+  try {
+    const taskWeek = await getWeekById(task.week_id)
+    if (!taskWeek) return
+
+    const deadlineMonday = mondayOf(task.deadline)
+
+    if (deadlineMonday <= taskWeek.week_start_date) {
+      // Deadline no longer stretches into a later week.
+      await removeDeadlineReflections(task.id)
+      return
+    }
+
+    // Every Monday strictly after the task's own week, up to and including
+    // the deadline's week.
+    const targetWeekStarts = []
+    let cursor = isoAddDays(taskWeek.week_start_date, 7)
+    while (cursor <= deadlineMonday) {
+      targetWeekStarts.push(cursor)
+      cursor = isoAddDays(cursor, 7)
+    }
+
+    const { data: existingReflections } = await supabase
+      .from('tasks')
+      .select('id, week_id')
+      .eq('deadline_reflection_source_id', task.id)
+
+    const existingByWeekId = new Map((existingReflections || []).map((r) => [r.week_id, r.id]))
+    const wantedWeekIds = new Set()
+
+    for (const weekStart of targetWeekStarts) {
+      const w = await getOrCreateWeek(weekStart)
+      wantedWeekIds.add(w.id)
+      if (!existingByWeekId.has(w.id)) {
+        await supabase.from('tasks').insert([{
+          team_member_id: task.team_member_id,
+          week_id: w.id,
+          heading: task.heading,
+          task_name: task.task_name,
+          deadline: task.deadline,
+          estimated_hours: task.estimated_hours ?? null,
+          status: 'pending',
+          parent_task_id: null,
+          position: 0,
+          deadline_reflection_source_id: task.id,
+        }])
+      } else {
+        // Keep the reflection's display fields in sync with the source.
+        await supabase
+          .from('tasks')
+          .update({
+            task_name: task.task_name,
+            heading: task.heading,
+            estimated_hours: task.estimated_hours ?? null,
+            deadline: task.deadline,
+          })
+          .eq('id', existingByWeekId.get(w.id))
+      }
+    }
+
+    // Drop reflections in weeks we no longer need (e.g. deadline moved earlier).
+    const staleIds = (existingReflections || [])
+      .filter((r) => !wantedWeekIds.has(r.week_id))
+      .map((r) => r.id)
+    if (staleIds.length) {
+      await supabase.from('tasks').delete().in('id', staleIds)
+    }
+  } catch (err) {
+    console.error('ensureDeadlineReflections failed:', err)
+  }
+}
+
+// Remove every reflection copy generated from a given source task.
+export async function removeDeadlineReflections(sourceTaskId) {
+  if (!sourceTaskId) return
+  const { error } = await supabase
+    .from('tasks')
+    .delete()
+    .eq('deadline_reflection_source_id', sourceTaskId)
+  if (error) throw error
+}
+
+// ── Projects (admin-managed dropdown list) ───────────────────────────
+// A simple named list that populates the "Add Project" dropdown when
+// creating a project/heading on a team member's week. Managed from the
+// Admin panel; users can still type a custom name outside this list.
+export async function getProjects() {
+  const { data, error } = await supabase
+    .from('projects')
+    .select('*')
+    .order('name', { ascending: true })
+
+  if (error) throw error
+  return data || []
+}
+
+export async function createProject(name) {
+  const trimmed = (name || '').trim()
+  if (!trimmed) throw new Error('Project name is required')
+
+  const { data, error } = await supabase
+    .from('projects')
+    .insert([{ name: trimmed }])
+    .select()
+
+  if (error) throw error
+  return data?.[0]
+}
+
+export async function deleteProject(projectId) {
+  const { error } = await supabase
+    .from('projects')
+    .delete()
+    .eq('id', projectId)
+
+  if (error) throw error
+}
+
+// ── Realtime ──────────────────────────────────────────────────────────
+// Subscribe to Postgres changes (insert/update/delete) on one or more
+// tables and invoke `onChange` whenever any of them fire. Returns an
+// unsubscribe function to call on cleanup (e.g. in a useEffect return).
+//
+// NOTE: Realtime must be enabled for these tables in the Supabase project
+// (Database → Replication → supabase_realtime), e.g.:
+//   ALTER PUBLICATION supabase_realtime ADD TABLE public.tasks;
+// See supabase-migration-v2.sql for the full list.
+export function subscribeToChanges(channelName, subscriptions, onChange) {
+  const channel = supabase.channel(channelName)
+  subscriptions.forEach(({ table, filter }) => {
+    channel.on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table, ...(filter ? { filter } : {}) },
+      onChange
+    )
+  })
+  channel.subscribe()
+  return () => {
+    supabase.removeChannel(channel)
+  }
 }
