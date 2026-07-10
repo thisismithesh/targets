@@ -1,5 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
-import { supabase, getTaskComments, addTaskComment, deleteTaskComment } from '../lib/supabase'
+import {
+  supabase,
+  getTaskComments,
+  addTaskComment,
+  deleteTaskComment,
+  ensureDeadlineReflections,
+} from '../lib/supabase'
 import { formatDate, getStatusColor, getStatusLabel, isOverdue, isDueToday, openDatePicker } from '../lib/utils'
 
 export default function Task({ 
@@ -15,9 +21,17 @@ export default function Task({
   onIndent,
   onOutdent,
   commentCount = 0,
+  // Editing coordination (lifted up so only one task's editor is open at a
+  // time, and nothing opens automatically on load — see parent page).
+  editingTaskId = null,
+  onStartEdit,
+  onStopEdit,
+  onRegisterSave,
+  onUnregisterSave,
+  editingCardRef,
 }) {
   const [showSubtasks, setShowSubtasks] = useState(true)
-  const [isEditing, setIsEditing] = useState(!task.task_name)
+  const isEditing = editingTaskId === task.id
   const [editedName, setEditedName] = useState(task.task_name)
   const [editedDeadline, setEditedDeadline] = useState(task.deadline || '')
   const [editedHours, setEditedHours] = useState(task.estimated_hours || '')
@@ -128,6 +142,12 @@ export default function Task({
       })
       .eq('id', task.id)
 
+    if (!task.deadline_reflection_source_id) {
+      ensureDeadlineReflections({ ...task, status: newStatus }).catch((e) =>
+        console.error('Error syncing deadline reflections:', e)
+      )
+    }
+
     if (onTaskUpdate) onTaskUpdate()
   }
 
@@ -157,21 +177,49 @@ export default function Task({
       })
       .eq('id', task.id)
 
+    if (!task.deadline_reflection_source_id) {
+      ensureDeadlineReflections({ ...task, status: newStatus }).catch((e) =>
+        console.error('Error syncing deadline reflections:', e)
+      )
+    }
+
     if (onTaskUpdate) onTaskUpdate()
   }
 
   const saveTaskEdit = async () => {
+    const updates = {
+      task_name: editedName,
+      deadline: editedDeadline || null,
+      estimated_hours: editedHours ? parseFloat(editedHours) : null,
+    }
+
     await supabase
       .from('tasks')
-      .update({
-        task_name: editedName,
-        deadline: editedDeadline || null,
-        estimated_hours: editedHours ? parseFloat(editedHours) : null
-      })
+      .update(updates)
       .eq('id', task.id)
 
-    setIsEditing(false)
-    onTaskUpdate()
+    if (!task.deadline_reflection_source_id) {
+      ensureDeadlineReflections({ ...task, ...updates }).catch((e) =>
+        console.error('Error syncing deadline reflections:', e)
+      )
+    }
+
+    if (onTaskUpdate) onTaskUpdate()
+  }
+
+  // Registers this task's save function with the parent page so that
+  // switching to edit another task (or clicking away) can auto-save
+  // whatever was in progress here before closing the editor.
+  useEffect(() => {
+    if (onRegisterSave) onRegisterSave(task.id, saveTaskEdit)
+    return () => {
+      if (onUnregisterSave) onUnregisterSave(task.id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task.id, editedName, editedDeadline, editedHours])
+
+  const beginEdit = () => {
+    if (onStartEdit) onStartEdit(task.id)
   }
 
   const overdue = isOverdue(task.deadline, task.completed_date, localTaskStatus)
@@ -180,6 +228,7 @@ export default function Task({
   return (
     <>
       <div 
+        ref={isEditing ? editingCardRef : undefined}
         className={`task-card ${
           localTaskStatus === 'on-hold' ? 'on-hold' : 
           localTaskStatus === 'carry-forward' || localCarryForwardWeeks > 0 ? 'carry-forward' :
@@ -245,13 +294,22 @@ export default function Task({
                   className="flex-[1] min-w-0 px-1 py-1 border border-gray-300 rounded text-xs"
                 />
                 <button
-                  onClick={saveTaskEdit}
+                  onClick={async () => {
+                    await saveTaskEdit()
+                    if (onStopEdit) onStopEdit(task.id, { save: false })
+                  }}
                   className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 flex-shrink-0"
                 >
                   ✓
                 </button>
                 <button
-                  onClick={() => setIsEditing(false)}
+                  onClick={() => {
+                    // Discard in-progress edits and close.
+                    setEditedName(task.task_name)
+                    setEditedDeadline(task.deadline || '')
+                    setEditedHours(task.estimated_hours || '')
+                    if (onStopEdit) onStopEdit(task.id, { save: false })
+                  }}
                   className="px-2 py-1 bg-gray-300 text-gray-700 text-xs rounded hover:bg-gray-400 flex-shrink-0"
                 >
                   ✕
@@ -261,16 +319,16 @@ export default function Task({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 overflow-hidden">
                   <h3 
-                    onClick={() => setIsEditing(true)}
+                    onClick={beginEdit}
                     className={`text-sm font-medium cursor-pointer hover:underline truncate shrink ${
                       !task.task_name
                         ? 'text-gray-400'
+                        : localTaskStatus === 'on-hold'
+                        ? 'text-red-600'
                         : localCarryForwardWeeks > 0
                         ? `text-purple-600 ${localTaskStatus === 'completed' ? 'line-through' : ''}`
                         : localTaskStatus === 'completed'
                         ? 'line-through text-gray-500'
-                        : localTaskStatus === 'on-hold'
-                        ? 'text-red-600'
                         : 'text-gray-900'
                     }`}
                   >
@@ -286,6 +344,14 @@ export default function Task({
                       Due today
                     </span>
                   )}
+                  {task.deadline_reflection_source_id && (
+                    <span
+                      className="badge bg-blue-50 text-blue-700 text-xs flex-shrink-0"
+                      title="Auto-added here because its deadline falls in a later week"
+                    >
+                      Upcoming
+                    </span>
+                  )}
                 </div>
               </div>
             )}
@@ -295,7 +361,7 @@ export default function Task({
             <div className="flex items-center gap-1.5 flex-shrink-0">
               <div className="flex items-center gap-1 text-sm text-gray-500 whitespace-nowrap mr-3">
                 <span
-                  onClick={() => setIsEditing(true)}
+                  onClick={beginEdit}
                   className="cursor-pointer hover:underline"
                   title="Click to edit"
                 >
@@ -303,7 +369,7 @@ export default function Task({
                 </span>
                 <span className="text-gray-300">•</span>
                 <span
-                  onClick={() => setIsEditing(true)}
+                  onClick={beginEdit}
                   className="cursor-pointer hover:underline"
                   title="Click to edit"
                 >
@@ -484,6 +550,12 @@ export default function Task({
                   task={subtask}
                   onTaskUpdate={onTaskUpdate}
                   isSubtask={true}
+                  editingTaskId={editingTaskId}
+                  onStartEdit={onStartEdit}
+                  onStopEdit={onStopEdit}
+                  onRegisterSave={onRegisterSave}
+                  onUnregisterSave={onUnregisterSave}
+                  editingCardRef={editingCardRef}
                 />
               ))}
             </div>
