@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase, getTeamMembers, getCurrentWeek, getOrCreateWeek, getStarCounts } from '../lib/supabase'
+import { supabase, getTeamMembers, getCurrentWeek, getOrCreateWeek, getStarCounts, subscribeToChanges } from '../lib/supabase'
 import TeamMemberRow from '../components/TeamMemberRow'
 import { getWeekLabelShort } from '../lib/utils'
 import { addWeeks, subWeeks, startOfWeek, format, parseISO } from 'date-fns'
@@ -33,6 +33,22 @@ export default function Dashboard() {
   useEffect(() => {
     if (currentWeekStart) loadData()
   }, [currentWeekStart, refreshKey, selectedTeam])
+
+  // Live-sync: pick up task/member/star changes made on other devices
+  // without requiring a manual refresh.
+  useEffect(() => {
+    if (!week?.id) return
+    const unsubscribe = subscribeToChanges(
+      `dashboard-${week.id}`,
+      [
+        { table: 'tasks', filter: `week_id=eq.${week.id}` },
+        { table: 'team_members' },
+        { table: 'clean_sweeps' },
+      ],
+      () => setRefreshKey((prev) => prev + 1)
+    )
+    return unsubscribe
+  }, [week?.id])
 
   const loadData = async () => {
     try {
