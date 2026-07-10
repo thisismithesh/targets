@@ -1,10 +1,30 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { supabase, getSubtasks, getTeamMemberById, getWeekById, createTask, updateTask, deleteTask, recordCleanSweep, removeCleanSweep, getStarCount, getCommentCounts, getHeadingOrders, saveHeadingOrder } from '../lib/supabase'
+import {
+  supabase,
+  getSubtasks,
+  getTeamMemberById,
+  getWeekById,
+  createTask,
+  updateTask,
+  deleteTask,
+  recordCleanSweep,
+  removeCleanSweep,
+  getStarCount,
+  getCommentCounts,
+  getHeadingOrders,
+  saveHeadingOrder,
+  deleteProjectHeading,
+  getProjects,
+  ensureDeadlineReflections,
+  subscribeToChanges,
+} from '../lib/supabase'
 import Task from '../components/Task'
 import CleanSweepPopup from '../components/CleanSweepPopup'
 import Stars from '../components/Stars'
 import { getWeekLabelShort, openDatePicker } from '../lib/utils'
+
+const CUSTOM_PROJECT_OPTION = '__custom__'
 
 export default function TeamMemberDetail() {
   const { memberId, weekId } = useParams()
@@ -34,6 +54,59 @@ export default function TeamMemberDetail() {
   const [showAddProjectForm, setShowAddProjectForm] = useState(false)
   const [newProjectName, setNewProjectName] = useState('')
   const [addMessage, setAddMessage] = useState('')
+  const [projectOptions, setProjectOptions] = useState([])
+  const [projectSelectValue, setProjectSelectValue] = useState('')
+
+  // Delete-project (heading) confirmation
+  const [confirmDeleteHeading, setConfirmDeleteHeading] = useState(null)
+
+  // Editing coordination: only one task's editor may be open at a time, and
+  // none is open by default. `saveHandlersRef` lets us auto-save whatever
+  // was in progress in a task before switching to another or clicking away.
+  const [editingTaskId, setEditingTaskId] = useState(null)
+  const saveHandlersRef = useRef({})
+  const editingCardRef = useRef(null)
+
+  const registerEditSave = (taskId, fn) => {
+    saveHandlersRef.current[taskId] = fn
+  }
+  const unregisterEditSave = (taskId) => {
+    delete saveHandlersRef.current[taskId]
+  }
+
+  const startEditingTask = async (taskId) => {
+    if (editingTaskId && editingTaskId !== taskId) {
+      const prevSave = saveHandlersRef.current[editingTaskId]
+      if (prevSave) {
+        try {
+          await prevSave()
+        } catch (err) {
+          console.error('Error auto-saving previous edit:', err)
+        }
+      }
+    }
+    setEditingTaskId(taskId)
+  }
+
+  const stopEditingTask = (taskId) => {
+    setEditingTaskId((curr) => (curr === taskId ? null : curr))
+  }
+
+  // Close (and auto-save) the open editor when clicking anywhere outside it.
+  useEffect(() => {
+    if (!editingTaskId) return
+    const handleClickOutside = (e) => {
+      if (editingCardRef.current && !editingCardRef.current.contains(e.target)) {
+        const fn = saveHandlersRef.current[editingTaskId]
+        if (fn) {
+          Promise.resolve(fn()).catch((err) => console.error('Error saving on outside click:', err))
+        }
+        setEditingTaskId(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [editingTaskId])
 
   // Inline add-task state (used by the per-heading "+ Add" buttons)
   const [inlineHeading, setInlineHeading] = useState(null)
@@ -46,6 +119,25 @@ export default function TeamMemberDetail() {
   useEffect(() => {
     loadData()
   }, [memberId, weekId])
+
+  // Reset the editor when navigating to a different member/week.
+  useEffect(() => {
+    setEditingTaskId(null)
+    saveHandlersRef.current = {}
+  }, [memberId, weekId])
+
+  // Admin-managed project name suggestions for the "Add Project" dropdown.
+  const loadProjectOptions = async () => {
+    try {
+      setProjectOptions(await getProjects())
+    } catch (e) {
+      console.error('Error loading projects:', e)
+    }
+  }
+
+  useEffect(() => {
+    loadProjectOptions()
+  }, [])
 
   const fetchTasks = async () => {
     const { data: tasksData, error: tasksError } = await supabase
@@ -150,6 +242,40 @@ export default function TeamMemberDetail() {
     }
   }
 
+  const refreshHeadingOrders = async () => {
+    try {
+      const orders = await getHeadingOrders(memberId, weekId)
+      const orderMap = {}
+      orders.forEach((o) => { orderMap[o.heading] = o.position })
+      setHeadingOrders(orderMap)
+    } catch (e) {
+      console.error('Error refreshing heading order:', e)
+    }
+  }
+
+  // Live-sync: reflect changes made on other devices/tabs without needing
+  // a manual page refresh.
+  useEffect(() => {
+    if (!memberId || !weekId) return
+    const unsubscribe = subscribeToChanges(
+      `team-member-${memberId}-${weekId}`,
+      [
+        { table: 'tasks', filter: `team_member_id=eq.${memberId}` },
+        { table: 'task_comments' },
+        { table: 'clean_sweeps', filter: `team_member_id=eq.${memberId}` },
+        { table: 'heading_orders', filter: `team_member_id=eq.${memberId}` },
+        { table: 'projects' },
+      ],
+      () => {
+        handleTaskUpdate()
+        refreshHeadingOrders()
+        loadProjectOptions()
+      }
+    )
+    return unsubscribe
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [memberId, weekId])
+
   // Add a new project (heading)
   const handleAddProject = async (e) => {
     e.preventDefault()
@@ -173,13 +299,43 @@ export default function TeamMemberDetail() {
       if (created) {
         setTasks((prev) => [...prev, created])
         setSubtaskMap((prev) => ({ ...prev, [created.id]: [] }))
+        // Open the new (blank) task's editor right away so the user can name
+        // it — this is an explicit user action, not something opened by
+        // default on page load.
+        startEditingTask(created.id)
       }
       setNewProjectName('')
+      setProjectSelectValue('')
       setAddMessage('')
       setShowAddProjectForm(false)
     } catch (err) {
       setAddMessage('Error adding project')
       console.error(err)
+    }
+  }
+
+  const handleProjectSelectChange = (e) => {
+    const val = e.target.value
+    setProjectSelectValue(val)
+    setNewProjectName(val === CUSTOM_PROJECT_OPTION ? '' : val)
+  }
+
+  // Delete an entire project (heading) and all of its tasks for this week.
+  const handleDeleteProject = async (heading) => {
+    // Optimistic UI removal
+    const removedIds = tasks.filter((t) => t.heading === heading).map((t) => t.id)
+    setTasks((prev) => prev.filter((t) => t.heading !== heading))
+    setSubtaskMap((prev) => {
+      const next = { ...prev }
+      removedIds.forEach((id) => delete next[id])
+      return next
+    })
+    setConfirmDeleteHeading(null)
+    try {
+      await deleteProjectHeading(memberId, weekId, heading)
+    } catch (err) {
+      console.error('Error deleting project:', err)
+      handleTaskUpdate() // resync on failure
     }
   }
 
@@ -199,6 +355,11 @@ export default function TeamMemberDetail() {
       if (created) {
         setTasks((prev) => [...prev, created])
         setSubtaskMap((prev) => ({ ...prev, [created.id]: [] }))
+        if (created.deadline) {
+          ensureDeadlineReflections(created).catch((e) =>
+            console.error('Error syncing deadline reflections:', e)
+          )
+        }
       }
       setInlineTask({ task_name: '', deadline: '', estimated_hours: '' })
       setInlineHeading(null)
@@ -215,6 +376,7 @@ export default function TeamMemberDetail() {
       delete next[taskId]
       return next
     })
+    if (editingTaskId === taskId) setEditingTaskId(null)
     try {
       await deleteTask(taskId)
     } catch (err) {
@@ -381,14 +543,28 @@ export default function TeamMemberDetail() {
               )}
               <form onSubmit={handleAddProject} className="space-y-3">
                 <div>
-                  <input
-                    type="text"
-                    value={newProjectName}
-                    onChange={(e) => setNewProjectName(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="e.g., Backend Development"
+                  <select
+                    value={projectSelectValue}
+                    onChange={handleProjectSelectChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-2"
                     autoFocus
-                  />
+                  >
+                    <option value="">Select a project…</option>
+                    {projectOptions.map((p) => (
+                      <option key={p.id} value={p.name}>{p.name}</option>
+                    ))}
+                    <option value={CUSTOM_PROJECT_OPTION}>+ Custom project name…</option>
+                  </select>
+
+                  {(projectSelectValue === CUSTOM_PROJECT_OPTION || projectOptions.length === 0) && (
+                    <input
+                      type="text"
+                      value={newProjectName}
+                      onChange={(e) => setNewProjectName(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="e.g., Backend Development"
+                    />
+                  )}
                 </div>
                 <div className="flex gap-2 pt-1">
                   <button
@@ -399,7 +575,7 @@ export default function TeamMemberDetail() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setShowAddProjectForm(false); setAddMessage('') }}
+                    onClick={() => { setShowAddProjectForm(false); setAddMessage(''); setProjectSelectValue(''); setNewProjectName('') }}
                     className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md text-sm hover:bg-gray-50 font-medium"
                   >
                     Cancel
@@ -472,6 +648,32 @@ export default function TeamMemberDetail() {
                         {heading}
                       </h2>
                     </div>
+
+                    {confirmDeleteHeading === heading ? (
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <span className="text-xs text-gray-500">Delete project & its tasks?</span>
+                        <button
+                          onClick={() => handleDeleteProject(heading)}
+                          className="px-2 py-0.5 bg-red-600 text-white text-xs rounded hover:bg-red-700 font-medium"
+                        >
+                          Delete
+                        </button>
+                        <button
+                          onClick={() => setConfirmDeleteHeading(null)}
+                          className="px-2 py-0.5 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300 font-medium"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmDeleteHeading(heading)}
+                        className="text-xs text-red-600 hover:text-red-700 font-medium flex-shrink-0"
+                        title="Delete this project and all its tasks"
+                      >
+                        Delete Project
+                      </button>
+                    )}
                   </div>
                   <div className="space-y-0">
                     {headingTasks.map((task, index) => (
@@ -482,6 +684,12 @@ export default function TeamMemberDetail() {
                         onTaskUpdate={handleTaskUpdate}
                         onDeleteTask={handleDeleteTask}
                         commentCount={commentCounts[task.id] || 0}
+                        editingTaskId={editingTaskId}
+                        onStartEdit={startEditingTask}
+                        onStopEdit={stopEditingTask}
+                        onRegisterSave={registerEditSave}
+                        onUnregisterSave={unregisterEditSave}
+                        editingCardRef={editingCardRef}
                         canMoveUp={index > 0}
                         canMoveDown={index < headingTasks.length - 1}
                         onMoveUp={() => moveTask(headingTasks, index, 'up')}
