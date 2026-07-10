@@ -1,15 +1,35 @@
 import { useState, useEffect } from 'react'
-import { supabase, getTeamMembers, getCurrentWeek, getOrCreateWeek, getStarCounts, subscribeToChanges } from '../lib/supabase'
+import { useSearchParams } from 'react-router-dom'
+import { supabase, getTeamMembers, getCurrentWeek, getOrCreateWeek, getStarCounts, getLeavePlansForWeek, subscribeToChanges } from '../lib/supabase'
 import TeamMemberRow from '../components/TeamMemberRow'
 import { getWeekLabelShort } from '../lib/utils'
-import { addWeeks, subWeeks, startOfWeek, format, parseISO } from 'date-fns'
+import { addWeeks, subWeeks, addDays, startOfWeek, format, parseISO } from 'date-fns'
+
+const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 function getMondayOf(date) {
   const d = startOfWeek(date, { weekStartsOn: 1 })
   return format(d, 'yyyy-MM-dd')
 }
 
+// Given leave plans overlapping a week, return the weekday labels (not
+// dates) that fall within that week — e.g. ['Mon', 'Tue'].
+function getUnavailableDayLabels(leavePlans, weekStart, weekEnd) {
+  const days = new Set()
+  leavePlans.forEach((lp) => {
+    let cursor = lp.start_date > weekStart ? lp.start_date : weekStart
+    const end = lp.end_date < weekEnd ? lp.end_date : weekEnd
+    while (cursor <= end) {
+      const idx = (parseISO(cursor).getDay() + 6) % 7 // Mon=0 .. Sun=6
+      days.add(WEEKDAY_LABELS[idx])
+      cursor = format(addDays(parseISO(cursor), 1), 'yyyy-MM-dd')
+    }
+  })
+  return WEEKDAY_LABELS.filter((d) => days.has(d))
+}
+
 export default function Dashboard() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [currentWeekStart, setCurrentWeekStart] = useState(null) // 'YYYY-MM-DD' of Monday
   const [todayWeekStart, setTodayWeekStart] = useState(null)    // always today's week
   const [week, setWeek] = useState(null)
@@ -18,16 +38,20 @@ export default function Dashboard() {
   const [teamMembers, setTeamMembers] = useState([])
   const [tasksByMember, setTasksByMember] = useState({})
   const [starCounts, setStarCounts] = useState({})
+  const [leavesByMember, setLeavesByMember] = useState({})
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [teams, setTeams] = useState([])
 
-  // On first load, determine today's week
+  // On first load, determine today's week — and honor a `?week=` param so
+  // links/back-navigation can restore whichever week was being viewed.
   useEffect(() => {
     const todayMonday = getMondayOf(new Date())
     setTodayWeekStart(todayMonday)
-    setCurrentWeekStart(todayMonday)
+    const weekParam = searchParams.get('week')
+    setCurrentWeekStart(/^\d{4}-\d{2}-\d{2}$/.test(weekParam || '') ? weekParam : todayMonday)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -44,6 +68,7 @@ export default function Dashboard() {
         { table: 'tasks', filter: `week_id=eq.${week.id}` },
         { table: 'team_members' },
         { table: 'clean_sweeps' },
+        { table: 'leave_plans' },
       ],
       () => setRefreshKey((prev) => prev + 1)
     )
@@ -102,6 +127,18 @@ export default function Dashboard() {
       } catch (e) {
         console.error('Error loading stars:', e)
       }
+
+      try {
+        const leaves = await getLeavePlansForWeek(w.week_start_date, w.week_end_date)
+        const grouped2 = {}
+        leaves.forEach((lp) => {
+          if (!grouped2[lp.team_member_id]) grouped2[lp.team_member_id] = []
+          grouped2[lp.team_member_id].push(lp)
+        })
+        setLeavesByMember(grouped2)
+      } catch (e) {
+        console.error('Error loading leave plans:', e)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data')
       console.error('Error loading data:', err)
@@ -113,16 +150,21 @@ export default function Dashboard() {
   const handleTaskUpdate = () => setRefreshKey((prev) => prev + 1)
 
   const goToPrevWeek = () => {
-    const d = subWeeks(parseISO(currentWeekStart), 1)
-    setCurrentWeekStart(format(d, 'yyyy-MM-dd'))
+    const d = format(subWeeks(parseISO(currentWeekStart), 1), 'yyyy-MM-dd')
+    setCurrentWeekStart(d)
+    setSearchParams({ week: d })
   }
 
   const goToNextWeek = () => {
-    const d = addWeeks(parseISO(currentWeekStart), 1)
-    setCurrentWeekStart(format(d, 'yyyy-MM-dd'))
+    const d = format(addWeeks(parseISO(currentWeekStart), 1), 'yyyy-MM-dd')
+    setCurrentWeekStart(d)
+    setSearchParams({ week: d })
   }
 
-  const goToCurrentWeek = () => setCurrentWeekStart(todayWeekStart)
+  const goToCurrentWeek = () => {
+    setCurrentWeekStart(todayWeekStart)
+    setSearchParams({})
+  }
 
   const isThisWeek = currentWeekStart === todayWeekStart
 
@@ -228,8 +270,12 @@ export default function Dashboard() {
               key={member.id}
               teamMember={member}
               weekId={week?.id}
+              weekStart={currentWeekStart}
               tasks={tasksByMember[member.id] || []}
               starCount={starCounts[member.id] || 0}
+              unavailableDays={
+                week ? getUnavailableDayLabels(leavesByMember[member.id] || [], week.week_start_date, week.week_end_date) : []
+              }
             />
           ))}
         </div>
