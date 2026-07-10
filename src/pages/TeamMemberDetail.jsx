@@ -575,18 +575,18 @@ export default function TeamMemberDetail() {
       {teamMember && week && (
         <div className="flex flex-col lg:flex-row gap-6 items-start">
           {/* Sidebar */}
-          <aside className="w-full lg:w-72 flex-shrink-0 space-y-4 lg:sticky lg:top-6">
+          <aside className="w-full lg:w-80 flex-shrink-0 space-y-6 lg:sticky lg:top-6">
             <div>
               <Link to={dashWeek ? `/?week=${dashWeek}` : '/'} className="text-blue-600 hover:text-blue-700 font-medium text-sm">
                 ← Back to Dashboard
               </Link>
-              <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2 mt-2">
+              <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2 mt-3">
                 <span>{teamMember.name}</span>
                 <Stars count={starCount} />
               </h1>
-              <p className="text-lg text-gray-600">{getWeekRangeLabel(week.week_start_date, week.week_end_date)}</p>
+              <p className="text-lg text-gray-600 mt-1">{getWeekRangeLabel(week.week_start_date, week.week_end_date)}</p>
 
-              <div className="flex items-center gap-2 mt-4">
+              <div className="flex items-center gap-3 mt-5">
                 <button
                   onClick={() => setShowAddProjectForm((v) => !v)}
                   className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium text-sm"
@@ -603,29 +603,29 @@ export default function TeamMemberDetail() {
             </div>
 
             {/* Leave Plans */}
-            <div className="bg-white rounded-lg border border-gray-200 p-4">
-              <h3 className="text-base font-semibold text-gray-900 mb-3">Leave Plans</h3>
+            <div className="bg-white rounded-lg border border-gray-200 p-5">
+              <h3 className="text-base font-semibold text-gray-900 mb-4">Leave Plans</h3>
 
             {showAddLeaveForm && (
-              <form onSubmit={handleAddLeave} className="mb-4 p-3 bg-gray-50 rounded-md space-y-2">
+              <form onSubmit={handleAddLeave} className="mb-4 p-3 bg-gray-50 rounded-md space-y-3">
                 {leaveMessage && <p className="text-sm text-red-600">{leaveMessage}</p>}
-                <div className="flex gap-2">
-                  <div className="flex-1">
+                <div className="space-y-3">
+                  <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Start date</label>
                     <input
                       type="date"
                       value={newLeave.start_date}
                       onChange={(e) => setNewLeave({ ...newLeave, start_date: e.target.value })}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full min-w-0 px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
-                  <div className="flex-1">
+                  <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">End date</label>
                     <input
                       type="date"
                       value={newLeave.end_date}
                       onChange={(e) => setNewLeave({ ...newLeave, end_date: e.target.value })}
-                      className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full min-w-0 px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                 </div>
@@ -635,7 +635,7 @@ export default function TeamMemberDetail() {
                     type="text"
                     value={newLeave.reason}
                     onChange={(e) => setNewLeave({ ...newLeave, reason: e.target.value })}
-                    className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full min-w-0 px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="e.g., Vacation"
                   />
                 </div>
@@ -684,20 +684,20 @@ export default function TeamMemberDetail() {
           </div>
 
           {/* Progress */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <h3 className="text-base font-semibold text-gray-900 mb-3">Progress</h3>
+          <div className="bg-white rounded-lg border border-gray-200 p-5">
+            <h3 className="text-base font-semibold text-gray-900 mb-4">Progress</h3>
             {(() => {
               const total = completedCount + pendingCount + onHoldCount
               const pct = (n) => (total > 0 ? (n / total) * 100 : 0)
               return (
-                <div className="flex h-1.5 rounded-full overflow-hidden bg-gray-100 mb-4">
+                <div className="flex h-1.5 rounded-full overflow-hidden bg-gray-100 mb-5">
                   <div className="bg-green-500" style={{ width: `${pct(completedCount)}%` }} />
                   <div className="bg-yellow-500" style={{ width: `${pct(pendingCount)}%` }} />
                   <div className="bg-red-500" style={{ width: `${pct(onHoldCount)}%` }} />
                 </div>
               )
             })()}
-            <div className="space-y-2 text-sm">
+            <div className="space-y-3 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-green-600 font-medium">Completed</span>
                 <span className="text-gray-900 font-semibold">{completedCount}</span>
@@ -710,7 +710,7 @@ export default function TeamMemberDetail() {
                 <span className="text-red-600 font-medium">On Hold</span>
                 <span className="text-gray-900 font-semibold">{onHoldCount}</span>
               </div>
-              <div className="border-t border-gray-200 pt-2 flex items-center justify-between">
+              <div className="border-t border-gray-200 pt-3 mt-1 flex items-center justify-between">
                 <span className="text-purple-600 font-medium">Carry Forwards</span>
                 <span className="text-gray-900 font-semibold">{carryForwardCount}</span>
               </div>
